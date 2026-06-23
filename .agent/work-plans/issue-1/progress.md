@@ -19,3 +19,16 @@ The issue proposes extracting `WaterfallWidget` and `EchogramWidget` from `rqt_o
 - [ ] Consider writing an ADR for the dependency boundary decision (no rqt/rclcpp/rosbag2 in the library) — this is an architectural constraint future contributors need to know about and is the kind of design decision ADR-0001 targets.
 - [ ] When extending `WaterfallRow` to carry per-row world geometry, treat it as an interface change: audit existing consumers of `WaterfallRow` (in rqt_sonar_waterfall and anywhere else) before adding fields to ensure backward compatibility.
 - [ ] Ensure "tests carried over" means the test files physically move with the widget source — not just mentioned in prose. The CI must run them from the new package.
+
+## Plan Authored
+**Status**: complete
+**When**: 2026-06-23 16:00 +00:00
+**By**: Claude Code Agent (Claude Sonnet)
+
+**Plan**: `.agent/work-plans/issue-1/plan.md` at `7709596`
+**Branch**: feature/issue-1 at `7709596`
+**Phases**: 3
+
+### Open questions
+- [ ] Should `topic_filter.*` move to marine_sonar_widgets (pure STL, no rclcpp) or stay in rqt_sonar_waterfall (ROS-adjacent, no known second consumer)?
+- [ ] Namespace rename: move to `marine_sonar_widgets::` for extracted files (recommended) or keep `rqt_sonar_waterfall::` for zero-churn move?
