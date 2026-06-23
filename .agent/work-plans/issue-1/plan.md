@@ -15,8 +15,8 @@ exists. The widgets to extract live in `rqt_operator_tools` (same `ui_ws` layer)
   `ControlPanel` and `HistorySpinbox` depend on `marine_radar_control_msgs` (outside
   the allowed boundary) and stay in `rqt_sonar_waterfall`.
 - `rqt_marine_sonar`: `EchogramWidget` + `Ping` — 3 source files, 2 tests.
-  `EchogramWidget` already includes `rqt_sonar_waterfall/color_map.hpp`; include
-  paths update as part of the move.
+  `EchogramWidget` already includes both `rqt_sonar_waterfall/color_map.hpp` and
+  `gpu_color_map.hpp`; both include paths update as part of the move.
 
 `make_box_contact` + `MapPoint` live in `marine_perception_tools/src/contact_store.*`
 (internal, not installed). `ContactStore`'s save/load uses rclcpp serialization and
@@ -34,6 +34,12 @@ PR-C may overlap after PR-A merges.
 
 ### PR-A — Widget extraction + plugin thinning
 
+0. **Reconcile license to BSD-3-Clause** — the scaffold shipped Apache-2.0, but
+   the extracted code is BSD-3-Clause. Set `package.xml` `<license>` to
+   `BSD-3-Clause`, replace the repo `LICENSE` with the BSD-3-Clause text, and
+   update the `CMakeLists.txt` copyright header. Each moved source keeps its
+   original BSD-3-Clause header. Update `CONTRIBUTING.md`/`.agents/README.md`
+   license mentions to match.
 1. **Populate `marine_sonar_widgets`** — copy moved sources, rewrite include guards
    and namespace from `rqt_sonar_waterfall::` → `marine_sonar_widgets::` for all
    moved files. File set: `waterfall_widget`, `waterfall_buffer`, `waterfall_model`,
@@ -43,7 +49,8 @@ PR-C may overlap after PR-A merges.
    `marine_colormap`, `marine_acoustic_msgs`, `marine_interfaces`; mirror
    `marine_colormap`'s export setup. **No** `rclcpp`, `rqt`, or `rosbag2`.
 3. **Update `package.xml`** — add `qtbase5-dev`, `libqt5-opengl-dev`,
-   `marine_colormap`, `marine_acoustic_msgs`, `marine_interfaces`.
+   `marine_colormap`, `marine_acoustic_msgs`. (`marine_interfaces` is **not**
+   added here — it is first needed by PR-C's `contact_builder`.)
 4. **Move 12 test files** to `marine_sonar_widgets/test/`:
    `test_decode_samples`, `test_combine_rows`, `test_ground_resample`,
    `test_single_beam_extractor`, `test_waterfall_buffer`, `test_color_map`,
@@ -57,9 +64,13 @@ PR-C may overlap after PR-A merges.
 6. **Thin `rqt_marine_sonar`** — remove `echogram_widget`, `ping`, their tests;
    replace `rqt_sonar_waterfall` dep with `marine_sonar_widgets`. Update plugin
    `#include` paths and `find_package`.
-7. **CI** — add `marine_sonar_widgets/.github/workflows/ci.yml`; clone
-   `rqt_operator_tools`, `marine_colormap`, `marine_acoustic_msgs`,
-   `marine_interfaces` as sibling source deps (mirror `rqt_sonar_waterfall` CI).
+7. **CI** — update `marine_sonar_widgets/.github/workflows/ci.yml` (scaffold
+   already has a build/test/lint gate); add a sibling-source clone for
+   `marine_colormap` (the only source-sibling dep; `marine_acoustic_msgs`
+   resolves via rosdep). The `marine_interfaces` clone (cloned-and-pruned from
+   `unh_marine_autonomy`, as in `marine_perception_tools` CI) is added in PR-C
+   when `contact_builder` lands. `rqt_operator_tools` is a *consumer*, not a dep
+   of the library, so it is **not** cloned here.
 8. **ADR** — add `marine_sonar_widgets/.agent/decisions/0001-dependency-boundary.md`
    capturing the no-rqt/rclcpp/rosbag2 constraint and its rationale. The boundary
    is already in `.agents/README.md` but an ADR in the project repo makes it
@@ -99,8 +110,10 @@ PR-C may overlap after PR-A merges.
 
 | File | Change |
 |------|--------|
-| `marine_sonar_widgets/CMakeLists.txt` | Wire library, deps, 12+ gtest targets |
-| `marine_sonar_widgets/package.xml` | Add Qt, marine_colormap, marine_acoustic_msgs, marine_interfaces |
+| `marine_sonar_widgets/CMakeLists.txt` | BSD-3-Clause header; wire library, deps, 12 gtest targets |
+| `marine_sonar_widgets/package.xml` | `<license>`→BSD-3-Clause; add Qt, marine_colormap, marine_acoustic_msgs (marine_interfaces deferred to PR-C) |
+| `marine_sonar_widgets/LICENSE` | Replace Apache-2.0 text with BSD-3-Clause |
+| `marine_sonar_widgets/CONTRIBUTING.md`, `.agents/README.md` | Update license mentions to BSD-3-Clause |
 | `marine_sonar_widgets/include/marine_sonar_widgets/*.hpp` (×10) | Moved + include-guard/namespace renamed |
 | `marine_sonar_widgets/src/*.cpp` (×10) | Moved + namespace renamed |
 | `marine_sonar_widgets/test/test_*.cpp` (×12) | Moved + include paths updated |
@@ -143,17 +156,33 @@ PR-C may overlap after PR-A merges.
 | `WaterfallRow` struct | All direct instantiation sites in tests (only rqt_sonar_waterfall tests, now moving) | Yes — moved tests updated simultaneously |
 | `rqt_sonar_waterfall` public headers removed | `rqt_marine_sonar` includes (already `color_map.hpp`, `gpu_color_map.hpp`) | Yes — PR-A updates rqt_marine_sonar |
 | `make_box_contact` namespace changes | `marine_perception_tools/contact_store.*` call sites | Yes — PR-C adds using alias |
-| CI for marine_sonar_widgets | Must clone all 4 source deps (rqt_operator_tools, marine_colormap, marine_acoustic_msgs, marine_interfaces) | Yes — step 7 |
+| CI for marine_sonar_widgets | PR-A clones only `marine_colormap` (source sibling); `marine_acoustic_msgs` via rosdep; `marine_interfaces` clone added in PR-C | Yes — step 7 / PR-C |
 
-## Open Questions
+## Resolved Decisions (plan-review checkpoint, 2026-06-23)
 
-- Should `topic_filter.*` move to marine_sonar_widgets? It depends only on STL (no rclcpp),
-  but it does no sonar processing — it filters ROS-style topic strings. If the offline
-  viewer never needs it, it's ROS-adjacent and arguably cleaner left in rqt_sonar_waterfall.
-  Recommend: leave it in rqt_sonar_waterfall unless a second consumer emerges.
-- Namespace: rename `rqt_sonar_waterfall::` → `marine_sonar_widgets::` for moved
-  files (recommended — avoids a `marine_sonar_widgets` library with a `rqt_sonar_waterfall`
-  namespace), or keep as-is for zero-churn move. Plan assumes rename.
+Settled with the operator at the plan-review checkpoint (verdict was
+`changes-requested`); resolutions folded into the steps above:
+
+- **License → BSD-3-Clause** (must-fix). The scaffold shipped Apache-2.0, but the
+  extracted sources and both origin packages (`rqt_sonar_waterfall`,
+  `rqt_marine_sonar`) are BSD-3-Clause. PR-A reconciles the package to
+  BSD-3-Clause: `package.xml` `<license>`, the repo `LICENSE` file, and the
+  `CMakeLists.txt` copyright header all become BSD-3-Clause; each moved file keeps
+  its original BSD-3-Clause header. (See new step 0 + Files table.)
+- **`topic_filter.*` → move into the library** (must-fix; resolves the steps↔open-Q
+  contradiction). It is pure STL and dependency-boundary-clean (the
+  `marine_radar_control_msgs` reference is a topic-type string literal, not an
+  include). Moving it keeps the 12-test set intact (`test_topic_filter` included).
+- **Namespace → rename** `rqt_sonar_waterfall::` → `marine_sonar_widgets::` for all
+  moved files (avoids a `marine_sonar_widgets` library carrying a
+  `rqt_sonar_waterfall` namespace). `ping.cpp` is among the files this touches.
+- **ADR → write it** (step 8): a brief project-level ADR in this repo capturing the
+  no-rqt/rclcpp/rosbag2 boundary.
+- **`marine_interfaces` declared in PR-C, not PR-A** (suggestion, "only what's
+  needed"): the widgets use only `marine_acoustic_msgs`; `Contact`
+  (`marine_interfaces`) is first used by PR-C's `contact_builder`.
+- **`gpu_color_map.hpp` include** (suggestion): `echogram_widget.hpp` includes both
+  `color_map.hpp` and `gpu_color_map.hpp`; both include paths update on the move.
 
 ## Estimated Scope
 
