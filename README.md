@@ -33,7 +33,6 @@ and an offline bag app both link the library.
 
 Layer: `ui_ws`. Default branch: `jazzy`.
 
-> Scaffold only — the package skeleton, widgets, and tests arrive via the
-> extraction issue (moved out of `rqt_operator_tools`, behavior-preserving).
-> Per-file license headers (BSD-3-Clause / Apache-2.0) travel with the extracted
-> code.
+> Widgets and tests were moved out of `rqt_operator_tools`
+> (behavior-preserving extraction). The package and the extracted code are
+> BSD-3-Clause; per-file license headers travel with the extracted code.
