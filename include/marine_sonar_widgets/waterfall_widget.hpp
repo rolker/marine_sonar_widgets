@@ -31,9 +31,13 @@
 
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLWidget>
+#include <QPoint>
+#include <QRectF>
 
 #include <cstddef>
+#include <optional>
 #include <utility>
+#include <vector>
 
 #include "marine_sonar_widgets/color_map.hpp"
 #include "marine_sonar_widgets/gpu_color_map.hpp"
@@ -104,10 +108,29 @@ public:
   bool frozen() const {return frozen_;}
   std::size_t history() const {return buffer_.capacity();}
 
+  // --- marking mode (issue #1, PR-B) ---
+  /// Enable a left-drag rubber-band selection. When off, mouse events pass
+  /// through unchanged (the widget had no prior mouse handling, so this is the
+  /// only behavior either way). On release in mark mode the pixel rect is
+  /// inverted into a map-frame QRectF and `boxMarked` is emitted — unless no
+  /// dragged-over row carries a `world_pose`, in which case nothing is emitted.
+  void setMarkMode(bool on);
+  bool markMode() const {return mark_mode_;}
+
+Q_SIGNALS:
+  /// Emitted on drag-release in mark mode with the map-frame bounding box of the
+  /// marked region (normalized; same frame as the rows' WorldPose). Not emitted
+  /// when the marked region has no projectable pose.
+  void boxMarked(QRectF map_rect);
+
 protected:
   void initializeGL() override;
   void resizeGL(int w, int h) override;
   void paintGL() override;
+
+  void mousePressEvent(QMouseEvent * event) override;
+  void mouseMoveEvent(QMouseEvent * event) override;
+  void mouseReleaseEvent(QMouseEvent * event) override;
 
 private:
   /// (Re)upload the whole buffer to the intensity texture. Must run with the GL
@@ -130,6 +153,25 @@ private:
   void ensure_tvg_cache();
   /// Compute one row's TVG-corrected samples + extremes for the current slope.
   void compute_row_tvg(WaterfallRow & row) const;
+
+  /// Invert a widget pixel into a map-frame point, reversing the render
+  /// geometry (newest-at-top vertical scroll + centered across-track axis with
+  /// optional slant->ground and uniform-scale). Writes (mx, my) and returns true
+  /// when the pixel maps to a row that carries a `world_pose` and metric
+  /// geometry; returns false (no map point) otherwise. Mirrors project_sample()
+  /// in the reference sidescan_geometry.hpp.
+  ///
+  /// Inverts against `paint_rows_` — the per-row pose+geometry snapshot taken at
+  /// the last paint — NOT the live `buffer_`. This keeps a mark consistent with
+  /// the frame the user actually sees even if rows were appended or the buffer
+  /// was cleared between that paint and the mouse release (live, non-frozen use).
+  bool pixel_to_map(const QPoint & px, double & mx, double & my) const;
+
+  /// Snapshot, in displayed order (oldest first, index 0), the pose and metric
+  /// geometry of each row currently rendered into the ring. Called at the end of
+  /// paintGL once `ring_filled_` is final, so pixel_to_map can invert against the
+  /// painted frame independently of later `buffer_` mutation.
+  void update_paint_geometry();
 
   WaterfallBuffer buffer_;
   GpuColorMap gpu_;
@@ -175,6 +217,32 @@ private:
   bool display_is_ground_ = false;   ///< axis is ground range
   bool display_metric_ = false;      ///< axis is metres (label with "m")
   bool depth_missing_ = false;       ///< ground requested but newest row has no altitude
+
+  // --- marking mode state (issue #1, PR-B) ---
+  bool mark_mode_ = false;     ///< left-drag rubber-band selection enabled
+  bool marking_ = false;       ///< a drag is in progress
+  QPoint mark_start_;          ///< drag anchor (widget pixels)
+  QPoint mark_cur_;            ///< current drag corner (widget pixels)
+
+  /// One displayed row's pose + metric geometry, captured at paint time so
+  /// marking inverts against the rendered frame, not the live buffer. `altitude`
+  /// is the row's TRUE altitude (not the display-zeroed RowGeom::altitude), so
+  /// slant->ground inversion works even when the axis is shown in slant range.
+  struct PaintRow
+  {
+    std::optional<WorldPose> world_pose;  ///< map-frame sonar pose, if supplied
+    double half_width = 0.0;   ///< per-row display half-width (axis units)
+    double altitude = 0.0;     ///< true row altitude (m); 0 = unknown
+    bool ground = false;       ///< axis is ground range (else slant)
+    bool metric = false;       ///< axis is metres (vs sample counts)
+  };
+  /// Displayed rows (oldest first) as of the last paint; size == ring_filled_.
+  std::vector<PaintRow> paint_rows_;
+  /// Across-track scale mode + uniform half-width as of the last paint, captured
+  /// alongside paint_rows_ so a uniform-scale toggle between paint and mark
+  /// release can't desync inversion from the rendered frame.
+  bool paint_uniform_scale_ = true;
+  double paint_half_width_ = 0.0;
 };
 
 }  // namespace marine_sonar_widgets

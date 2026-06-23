@@ -190,6 +190,18 @@ if(BUILD_TESTING)
   set_tests_properties(test_waterfall_widget PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
 
+  # Marking-mode (pixel->map inversion) test for the GPU waterfall. Self-skips
+  # when no GL context can be created (geometry state is set during paintGL).
+  ament_add_gtest(test_waterfall_widget_marking
+    test/test_waterfall_widget_marking.cpp
+  )
+  target_include_directories(test_waterfall_widget_marking PRIVATE include)
+  ament_target_dependencies(test_waterfall_widget_marking marine_acoustic_msgs marine_colormap)
+  target_link_libraries(test_waterfall_widget_marking
+    ${PROJECT_NAME} Qt5::Widgets Qt5::Gui Qt5::OpenGL)
+  set_tests_properties(test_waterfall_widget_marking PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LIBGL_ALWAYS_SOFTWARE=1")
+
   # Offscreen-GL CPU/GPU colormap parity test. Self-skips when no GL context can
   # be created, so it never fails on a headless runner without software GL.
   ament_add_gtest(test_gpu_color_map

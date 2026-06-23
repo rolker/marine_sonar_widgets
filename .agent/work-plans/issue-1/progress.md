@@ -74,3 +74,44 @@ Specialists: Static Analysis (cppcheck+xmllint), Governance, Plan Drift, Claude 
 - [x] (suggestion, low) `ament_export_dependencies(Qt5)` lacks `COMPONENTS`; a minimal downstream may miss `Qt5::Widgets/Gui/OpenGL` targets — `CMakeLists.txt:223` — FIXED: exports `Qt5Widgets Qt5Gui Qt5OpenGL`
 
 **Resolution (2026-06-23):** 4 of 5 suggestions applied inline (Ship: recommended, 0 must-fix); rebuild + test green (258 tests, 0 failures). The 5th (consumer thinning) is the planned separate rqt_operator_tools PR. Ready to publish.
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-06-23 21:48 +00:00
+**By**: Claude Code Agent (Claude Opus)
+**Verdict**: changes-requested
+
+**Branch**: feature/issue-1 at `9323b05`
+**Mode**: pre-push
+**Depth**: Deep (reason: 523 changed lines; correctness-critical render-geometry inversion)
+**Must-fix**: 1 | **Suggestions**: 2
+**Round**: 2 | **Ship**: continue — genuine correctness concern (cross-pass confirmed) in `pixel_to_map`; effectively round 1 of the PR-B diff (prior pre-push entry reviewed PR-A, now merged)
+
+Reviews PR-B only (`9323b05`, target-marking mode); PR-A landed via PR #3 and is in `origin/jazzy`. Specialists: Static Analysis (cppcheck+xmllint — no findings on changed lines), Governance, Plan Drift (clean; matches plan steps 9-11), Claude Adversarial ×2 (Lens A logic, Lens B systemic — both independently flagged the must-fix). Inversion verified against the shader ring mapping (`gpu_color_map.cpp`), `project_row_into`, and the range-line overlay in `paintGL`; vertical mapping, port/starboard sign, and `world_pose` additivity all correct. ADR-0001 boundary honored (Qt-only, no rqt/rclcpp/rosbag2).
+
+### Findings
+- [ ] (must-fix) `pixel_to_map` mixes live `buffer_.rows()` with paint-time `ring_filled_`/`display_half_width_`; un-painted appends/clear between last paint and mark release silently mis-map the click to the wrong row's pose (live/non-frozen marking) — `src/waterfall_widget.cpp:728-754`
+- [ ] (suggestion) Slant-mode slant→ground conversion is a no-op (`g.altitude` forced 0 when not ground); comment misleadingly claims water-column removal — `src/waterfall_widget.cpp:783-786`
+- [ ] (suggestion) 4-corner bbox can under-cover the swept region on a curved/turning track (intermediate-row poses ignored) — `src/waterfall_widget.cpp:837-864`
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-06-23 22:47 +00:00
+**By**: Claude Code Agent (Claude Opus)
+**Verdict**: approved
+
+**Branch**: feature/issue-1 at `d62c6e3`
+**Mode**: pre-push
+**Depth**: Deep (reason: correctness-critical render-geometry inversion in a Qt/OpenGL shared widget)
+**Must-fix**: 0 | **Suggestions**: 4
+**Round**: 3 | **Ship**: recommended — round-2 must-fix genuinely resolved (paint-time snapshot); remaining items are mechanical polish, not rising
+
+Reviews PR-B at `d62c6e3` (target-marking + the review-fix commit) vs `origin/jazzy`. Specialists: Static Analysis (cppcheck — no actionable findings; all hits FPs), Governance, Plan Drift (on-plan, steps 9-11), Claude Adversarial ×2 (Lens A logic, Lens B systemic). Build green; 269 tests / 0 failures (the 6 marking GL tests compile+link but self-skip headless, like the sibling GL tests). The round-2 `pixel_to_map` mis-map is fixed: `update_paint_geometry()` snapshots each displayed row's pose+geometry at paint time and `pixel_to_map` inverts against that, not the live buffer; the `AppendAfterPaint` regression test discriminates against the old code (verified). Slant-altitude (true altitude carried) and curved-track bbox (per-pixel-row edge stepping; correct because the map distance is monotonic in |d|) suggestions from round 2 are also addressed. ADR-0001 boundary honored (Qt-only). Evaluated and rejected the `clear()`-before-repaint case as a must-fix: inversion against the old snapshot stays consistent with the un-repainted on-screen frame, which is the stated contract.
+
+### Findings
+- [ ] (suggestion) `pixel_to_map` still reads live `uniform_scale_`/`display_half_width_` (rest from snapshot); a uniform-scale toggle between paint and release can desync inversion from the painted frame — snapshot them into `PaintRow` — `src/waterfall_widget.cpp:789`
+- [ ] (suggestion) `px.x()` not clamped to `[0,w-1]` (unlike `py`); off-widget drag corner inverts beyond the rendered swath — `src/waterfall_widget.cpp:796,883`
+- [ ] (suggestion) `setMarkMode(true)` doesn't force a repaint; first drag on a quiescent/frozen view relies on a prior paint of `paint_rows_` — add a defensive `update()` — `src/waterfall_widget.cpp:716`
+- [x] (suggestion) Comment says projection is "affine in pixel-x"; in slant mode it's nonlinear but monotonic in |d| (result still correct) — reword to "monotonic" — `src/waterfall_widget.cpp:857`
+
+**Resolution (2026-06-23, `35adb1d`):** all 4 round-3 suggestions applied even though the verdict was already approved (cheap, and the first two are the same paint-time-vs-live class as the round-2 must-fix). Snapshot `uniform_scale_`+`display_half_width_` into `paint_uniform_scale_`/`paint_half_width_`; clamp `px.x()` to `[0,w-1]`; `setMarkMode()` repaints unconditionally; bbox comment reworded to "monotonic". Rebuild + full suite green (269 tests, 0 failures). PR-B ready to publish.
