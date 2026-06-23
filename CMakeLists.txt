@@ -36,6 +36,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(marine_acoustic_msgs REQUIRED)
 find_package(marine_colormap REQUIRED)
+find_package(marine_interfaces REQUIRED)
 find_package(Qt5 REQUIRED COMPONENTS Widgets Gui OpenGL)
 
 # QWidget / QOpenGLWidget classes carry Q_OBJECT macros, so MOC is required.
@@ -53,6 +54,7 @@ set(${PROJECT_NAME}_HEADERS
   include/${PROJECT_NAME}/waterfall_widget.hpp
   include/${PROJECT_NAME}/echogram_widget.hpp
   include/${PROJECT_NAME}/ping.hpp
+  include/${PROJECT_NAME}/contact_builder.hpp
 )
 
 set(${PROJECT_NAME}_SOURCES
@@ -66,6 +68,7 @@ set(${PROJECT_NAME}_SOURCES
   src/waterfall_widget.cpp
   src/echogram_widget.cpp
   src/ping.cpp
+  src/contact_builder.cpp
 )
 
 # SHARED so the library is position-independent and can link into downstream
@@ -87,6 +90,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 ament_target_dependencies(${PROJECT_NAME}
   marine_acoustic_msgs
   marine_colormap
+  marine_interfaces
 )
 
 target_link_libraries(${PROJECT_NAME} Qt5::Widgets Qt5::Gui Qt5::OpenGL)
@@ -166,6 +170,15 @@ if(BUILD_TESTING)
   )
   target_include_directories(test_topic_filter PRIVATE include)
 
+  # contact_builder is pure marine_interfaces + STL (no rclcpp): compile the
+  # unit-under-test source directly, like the other pure-logic tests.
+  ament_add_gtest(test_contact_builder
+    test/test_contact_builder.cpp
+    src/contact_builder.cpp
+  )
+  target_include_directories(test_contact_builder PRIVATE include)
+  ament_target_dependencies(test_contact_builder marine_interfaces)
+
   # ping.cpp delegates decoding to marine_sonar_widgets::decode_samples, which
   # lives in waterfall_model.cpp — compile it in so the test links standalone.
   ament_add_gtest(test_ping
@@ -232,7 +245,7 @@ endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(marine_acoustic_msgs marine_colormap
+ament_export_dependencies(marine_acoustic_msgs marine_colormap marine_interfaces
   Qt5Widgets Qt5Gui Qt5OpenGL)
 
 ament_package()

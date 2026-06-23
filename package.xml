@@ -10,7 +10,12 @@
   both produce the same marine_interfaces/msg/Contact when an analyst marks a
   target. No rqt / rclcpp / rosbag2 dependency.</description>
   <maintainer email="roland@ccom.unh.edu">Roland Arsenault</maintainer>
+  <!-- Widgets carry the UNH BSD-3-Clause header (extracted from
+       rqt_operator_tools); contact_builder keeps its original Apache-2.0 header
+       (extracted from marine_perception_tools) — Apache-2.0 is the ROS 2
+       convention for new code. -->
   <license>BSD-3-Clause</license>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
@@ -23,6 +28,8 @@
 
   <depend>marine_colormap</depend>
   <depend>marine_acoustic_msgs</depend>
+  <!-- contact_builder turns a marked box into marine_interfaces/msg/Contact. -->
+  <depend>marine_interfaces</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
