@@ -74,3 +74,22 @@ Specialists: Static Analysis (cppcheck+xmllint), Governance, Plan Drift, Claude 
 - [x] (suggestion, low) `ament_export_dependencies(Qt5)` lacks `COMPONENTS`; a minimal downstream may miss `Qt5::Widgets/Gui/OpenGL` targets — `CMakeLists.txt:223` — FIXED: exports `Qt5Widgets Qt5Gui Qt5OpenGL`
 
 **Resolution (2026-06-23):** 4 of 5 suggestions applied inline (Ship: recommended, 0 must-fix); rebuild + test green (258 tests, 0 failures). The 5th (consumer thinning) is the planned separate rqt_operator_tools PR. Ready to publish.
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-06-23 21:48 +00:00
+**By**: Claude Code Agent (Claude Opus)
+**Verdict**: changes-requested
+
+**Branch**: feature/issue-1 at `9323b05`
+**Mode**: pre-push
+**Depth**: Deep (reason: 523 changed lines; correctness-critical render-geometry inversion)
+**Must-fix**: 1 | **Suggestions**: 2
+**Round**: 2 | **Ship**: continue — genuine correctness concern (cross-pass confirmed) in `pixel_to_map`; effectively round 1 of the PR-B diff (prior pre-push entry reviewed PR-A, now merged)
+
+Reviews PR-B only (`9323b05`, target-marking mode); PR-A landed via PR #3 and is in `origin/jazzy`. Specialists: Static Analysis (cppcheck+xmllint — no findings on changed lines), Governance, Plan Drift (clean; matches plan steps 9-11), Claude Adversarial ×2 (Lens A logic, Lens B systemic — both independently flagged the must-fix). Inversion verified against the shader ring mapping (`gpu_color_map.cpp`), `project_row_into`, and the range-line overlay in `paintGL`; vertical mapping, port/starboard sign, and `world_pose` additivity all correct. ADR-0001 boundary honored (Qt-only, no rqt/rclcpp/rosbag2).
+
+### Findings
+- [ ] (must-fix) `pixel_to_map` mixes live `buffer_.rows()` with paint-time `ring_filled_`/`display_half_width_`; un-painted appends/clear between last paint and mark release silently mis-map the click to the wrong row's pose (live/non-frozen marking) — `src/waterfall_widget.cpp:728-754`
+- [ ] (suggestion) Slant-mode slant→ground conversion is a no-op (`g.altitude` forced 0 when not ground); comment misleadingly claims water-column removal — `src/waterfall_widget.cpp:783-786`
+- [ ] (suggestion) 4-corner bbox can under-cover the swept region on a curved/turning track (intermediate-row poses ignored) — `src/waterfall_widget.cpp:837-864`
