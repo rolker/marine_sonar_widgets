@@ -51,3 +51,24 @@ The issue proposes extracting `WaterfallWidget` and `EchogramWidget` from `rqt_o
 - [ ] (suggestion) Close the namespace-rename open question (rename recommended; `ping.cpp` is among files it touches) — `plan.md:154`
 
 Verified against source: file targeting accurate (10 hpp + 10 cpp + 12 tests; staying set correct); all moving files are dependency-boundary-clean (`topic_filter`'s `marine_radar_control_msgs` reference is a topic-type string literal, not an include). Plan is structurally sound; resolve the two must-fix items inline before implementation.
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-06-23 17:38 +00:00
+**By**: Claude Code Agent (Claude Opus)
+**Verdict**: approved
+
+**Branch**: feature/issue-1 at `cb4e907`
+**Mode**: pre-push
+**Depth**: Deep (reason: large extraction — 6.3k lines, 41 files, cross-layer Qt/OpenGL/GPU shared library)
+**Must-fix**: 0 | **Suggestions**: 5
+**Round**: 1 | **Ship**: recommended — faithful byte-for-byte extraction; dependency boundary, license, and namespace all clean; no must-fix defects
+
+Specialists: Static Analysis (cppcheck+xmllint), Governance, Plan Drift, Claude Adversarial ×2 (Lens A logic/move-fidelity, Lens B systemic/build). Lens A normalized each moved file for renames and byte-diffed against the live originals in `rqt_operator_tools` — zero residual diff, no dropped code, no logic change. Boundary (ADR-0001) honored: no rqt/rclcpp/rosbag2 includes. License reconciled to BSD-3-Clause consistently. CMake export wiring and test linkage correct.
+
+### Findings
+- [ ] (suggestion) `qtbase5-dev` is build_depend only, but PUBLIC widget headers expose Qt types — add as `<depend>`/build_export so downstream `find_package` consumers resolve it — `package.xml:18`
+- [ ] (suggestion) Stale "Scaffold only" package description — widgets have now landed — `package.xml:11`
+- [ ] (suggestion) Stale "Scaffold only" current-state section — update to post-extraction — `.agents/README.md:31-40`
+- [ ] (suggestion) Consumer thinning of `rqt_sonar_waterfall` / `rqt_marine_sonar` not done (separate repos; acceptable single-repo scoping) — required follow-up to avoid duplicated widget code
+- [ ] (suggestion, low) `ament_export_dependencies(Qt5)` lacks `COMPONENTS`; a minimal downstream may miss `Qt5::Widgets/Gui/OpenGL` targets — `CMakeLists.txt:223`
