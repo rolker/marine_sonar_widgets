@@ -719,8 +719,11 @@ void WaterfallWidget::setMarkMode(bool on)
   setCursor(on ? Qt::CrossCursor : Qt::ArrowCursor);
   if (!on) {
     marking_ = false;
-    update();
   }
+  // Repaint either way: turning off clears a stale rubber-band; turning on
+  // defensively refreshes paint_rows_ so a first drag on a quiescent/frozen view
+  // inverts against a current snapshot rather than relying on a prior paint.
+  update();
 }
 
 void WaterfallWidget::update_paint_geometry()
@@ -747,6 +750,10 @@ void WaterfallWidget::update_paint_geometry()
     pr.metric = g.metric;
     paint_rows_.push_back(pr);
   }
+  // Capture the across-track scale mode too, so inversion uses the same scale
+  // the frame was drawn with even if the setter is toggled before mark release.
+  paint_uniform_scale_ = uniform_scale_;
+  paint_half_width_ = display_half_width_;
 }
 
 bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) const
@@ -786,14 +793,17 @@ bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) 
   if (!row.metric) {
     return false;  // sample-axis row: no metric mapping to a map-frame point
   }
-  const double half = uniform_scale_ ? display_half_width_ : row.half_width;
+  const double half = paint_uniform_scale_ ? paint_half_width_ : row.half_width;
   if (!(half > 0.0)) {
     return false;
   }
   const double cx = static_cast<double>(w) / 2.0;
   const double px_per_unit = (static_cast<double>(w) / 2.0) / half;
-  // Signed display range: negative = port/left, positive = starboard/right.
-  const double d = (static_cast<double>(px.x()) + 0.5 - cx) / px_per_unit;
+  // Clamp x into the rendered width (like py) so an off-widget drag corner can't
+  // invert beyond the swath. Signed display range: negative = port/left,
+  // positive = starboard/right.
+  const double pxx = std::clamp(static_cast<double>(px.x()), 0.0, static_cast<double>(w - 1));
+  const double d = (pxx + 0.5 - cx) / px_per_unit;
 
   // Convert to an across-track GROUND distance (the lateral offset on the seabed
   // plane that project_sample() uses). In ground mode the axis already is ground
@@ -853,9 +863,10 @@ void WaterfallWidget::mouseReleaseEvent(QMouseEvent * event)
 
   // Project the marked region to a map-frame bounding box. The four corners
   // alone under-cover a curved/turning track (each row carries its own pose);
-  // because the per-row map projection is affine in pixel-x, a row's extremes
-  // lie on the box's left/right edges, so stepping every pixel-row in the span
-  // and projecting both edges captures the intermediate-row poses exactly.
+  // because the per-row map projection is monotonic in pixel-x (linear in ground
+  // mode, monotonic via slant->ground otherwise), a row's extremes lie on the
+  // box's left/right edges, so stepping every pixel-row in the span and
+  // projecting both edges captures the intermediate-row poses exactly.
   // Rows with no world_pose (or non-metric geometry) contribute nothing,
   // matching the reference guard: if nothing projects, emit nothing.
   bool have = false;

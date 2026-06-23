@@ -238,6 +238,11 @@ private:
   };
   /// Displayed rows (oldest first) as of the last paint; size == ring_filled_.
   std::vector<PaintRow> paint_rows_;
+  /// Across-track scale mode + uniform half-width as of the last paint, captured
+  /// alongside paint_rows_ so a uniform-scale toggle between paint and mark
+  /// release can't desync inversion from the rendered frame.
+  bool paint_uniform_scale_ = true;
+  double paint_half_width_ = 0.0;
 };
 
 }  // namespace marine_sonar_widgets
