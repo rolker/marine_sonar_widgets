@@ -8,19 +8,18 @@
   for the UNH marine autonomy stack. One implementation feeds both the live
   rqt_operator_tools plugins and the offline marine_perception_tools viewer, and
   both produce the same marine_interfaces/msg/Contact when an analyst marks a
-  target. No rqt / rclcpp / rosbag2 dependency. Scaffold only; widgets and tests
-  arrive via the extraction issue.</description>
+  target. No rqt / rclcpp / rosbag2 dependency.</description>
   <maintainer email="roland@ccom.unh.edu">Roland Arsenault</maintainer>
   <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <build_depend>qtbase5-dev</build_depend>
-  <!-- The exported library links Qt5::OpenGL, so downstream builders need the
-       Qt OpenGL dev package too (build_export), not just this package's own
+  <!-- PUBLIC widget headers expose Qt types and the exported library links
+       Qt5::Widgets/Gui/OpenGL, so these are full depends (build + build_export)
+       — downstream find_package consumers need them resolved, not just our own
        build. -->
-  <build_depend>libqt5-opengl-dev</build_depend>
-  <build_export_depend>libqt5-opengl-dev</build_export_depend>
+  <depend>qtbase5-dev</depend>
+  <depend>libqt5-opengl-dev</depend>
 
   <depend>marine_colormap</depend>
   <depend>marine_acoustic_msgs</depend>

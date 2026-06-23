@@ -67,8 +67,10 @@ Verified against source: file targeting accurate (10 hpp + 10 cpp + 12 tests; st
 Specialists: Static Analysis (cppcheck+xmllint), Governance, Plan Drift, Claude Adversarial ×2 (Lens A logic/move-fidelity, Lens B systemic/build). Lens A normalized each moved file for renames and byte-diffed against the live originals in `rqt_operator_tools` — zero residual diff, no dropped code, no logic change. Boundary (ADR-0001) honored: no rqt/rclcpp/rosbag2 includes. License reconciled to BSD-3-Clause consistently. CMake export wiring and test linkage correct.
 
 ### Findings
-- [ ] (suggestion) `qtbase5-dev` is build_depend only, but PUBLIC widget headers expose Qt types — add as `<depend>`/build_export so downstream `find_package` consumers resolve it — `package.xml:18`
-- [ ] (suggestion) Stale "Scaffold only" package description — widgets have now landed — `package.xml:11`
-- [ ] (suggestion) Stale "Scaffold only" current-state section — update to post-extraction — `.agents/README.md:31-40`
-- [ ] (suggestion) Consumer thinning of `rqt_sonar_waterfall` / `rqt_marine_sonar` not done (separate repos; acceptable single-repo scoping) — required follow-up to avoid duplicated widget code
-- [ ] (suggestion, low) `ament_export_dependencies(Qt5)` lacks `COMPONENTS`; a minimal downstream may miss `Qt5::Widgets/Gui/OpenGL` targets — `CMakeLists.txt:223`
+- [x] (suggestion) `qtbase5-dev` is build_depend only, but PUBLIC widget headers expose Qt types — add as `<depend>`/build_export so downstream `find_package` consumers resolve it — `package.xml:18` — FIXED: `qtbase5-dev` + `libqt5-opengl-dev` now full `<depend>`
+- [x] (suggestion) Stale "Scaffold only" package description — widgets have now landed — `package.xml:11` — FIXED
+- [x] (suggestion) Stale "Scaffold only" current-state section — update to post-extraction — `.agents/README.md:31-40` — FIXED (post-extraction state + PR-B/PR-C/thinning roadmap)
+- [ ] (suggestion, → follow-up) Consumer thinning of `rqt_sonar_waterfall` / `rqt_marine_sonar` not done (separate repos; acceptable single-repo scoping) — required follow-up to avoid duplicated widget code — deferred to the rqt_operator_tools thinning PR (can't build until this lib is published + in the manifest)
+- [x] (suggestion, low) `ament_export_dependencies(Qt5)` lacks `COMPONENTS`; a minimal downstream may miss `Qt5::Widgets/Gui/OpenGL` targets — `CMakeLists.txt:223` — FIXED: exports `Qt5Widgets Qt5Gui Qt5OpenGL`
+
+**Resolution (2026-06-23):** 4 of 5 suggestions applied inline (Ship: recommended, 0 must-fix); rebuild + test green (258 tests, 0 failures). The 5th (consumer thinning) is the planned separate rqt_operator_tools PR. Ready to publish.

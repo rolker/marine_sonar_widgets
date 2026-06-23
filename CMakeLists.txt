@@ -220,6 +220,7 @@ endif()
 
 ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 ament_export_include_directories(include)
-ament_export_dependencies(marine_acoustic_msgs marine_colormap Qt5)
+ament_export_dependencies(marine_acoustic_msgs marine_colormap
+  Qt5Widgets Qt5Gui Qt5OpenGL)
 
 ament_package()

@@ -29,16 +29,23 @@ caller.
 
 ## Current state
 
-**Scaffold only.** Empty buildable `ament_cmake` package (no library target
-yet). The widgets, their dependencies, and gtests arrive via the extraction
-issue (a behavior-preserving move out of `rqt_operator_tools`). When you add
-sources:
+**Widgets extracted (PR-A).** The `SHARED` `marine_sonar_widgets` library now
+holds the GPU display widgets moved (behavior-preserving) out of
+`rqt_operator_tools`: `WaterfallWidget`/`WaterfallBuffer`/`WaterfallModel`,
+`ColorMap`/`GpuColorMap`, `RowExtractor`, `PingPairer`, `TopicFilter`, plus
+`EchogramWidget`/`Ping` — with their 12 gtests. Deps: Qt5 + `marine_colormap` +
+`marine_acoustic_msgs`. License: BSD-3-Clause (matches the origin packages).
 
-- Declare the new deps in `package.xml` and wire the library + gtests in
-  `CMakeLists.txt` (mirror `marine_colormap`'s `SHARED` library + export setup).
-- Add the source-sibling clone steps to `.github/workflows/ci.yml`
-  (`marine_colormap` etc.), the way `marine_perception_tools` CI does.
-- Preserve each extracted file's original license header.
+Still to land:
+- **PR-B** — marking mode: `std::optional<WorldPose>` on `WaterfallRow`,
+  `setMarkMode()` + `boxMarked()` on `WaterfallWidget` (pose-source-agnostic).
+- **PR-C** — `make_box_contact` + `MapPoint` extracted from
+  `marine_perception_tools`; adds the `marine_interfaces` dep.
+- **Consumer thinning** (separate PRs in `rqt_operator_tools`): delete the moved
+  sources there and depend on this library; same for `marine_perception_tools`.
+
+When adding sources, preserve each file's original license header and keep the
+dependency boundary above (see [ADR 0001](../.agent/decisions/0001-dependency-boundary.md)).
 
 ## Layer / build
 
