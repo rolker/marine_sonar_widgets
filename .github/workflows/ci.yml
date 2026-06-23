@@ -1,9 +1,11 @@
 # CI for marine_sonar_widgets. See ADR-0004/0005 (enforcement hierarchy) in the
-# workspace repo for the rationale behind the build+test+lint gate. The scaffold
-# has no Qt/Ogre/ROS-message dependencies, so the build needs only ament_cmake +
-# the lint tooling pulled by rosdep. When the widget sources land (extraction
-# issue), add their source-sibling clones (e.g. marine_colormap) the way
-# rqt_operator_tools / marine_perception_tools CI does.
+# workspace repo for the rationale behind the build+test+lint gate. The library
+# depends on Qt5, marine_colormap (source sibling), and marine_acoustic_msgs
+# (resolves via rosdep). marine_colormap is not published to rosdep, so it is
+# cloned as a source sibling the way marine_perception_tools CI does.
+# marine_interfaces is NOT needed yet (deferred to PR-C's contact_builder), and
+# rqt_operator_tools is a consumer of this library, not a dependency, so neither
+# is cloned here.
 
 name: CI
 
@@ -42,6 +44,15 @@ jobs:
 
       - name: Create workspace
         run: mkdir -p ../ws/src && ln -s "$GITHUB_WORKSPACE" ../ws/src/marine_sonar_widgets
+
+      # marine_colormap is a source sibling (not in rosdep): the shared sonar
+      # widgets use its colormap library/shaders. Clone it so the build resolves.
+      # marine_acoustic_msgs resolves via rosdep.
+      - name: Clone marine_colormap source dependency
+        run: >
+          git clone --depth 1 -b jazzy
+          https://github.com/rolker/marine_colormap.git
+          ../ws/src/marine_colormap
 
       - name: Install ROS dependencies
         working-directory: ../ws

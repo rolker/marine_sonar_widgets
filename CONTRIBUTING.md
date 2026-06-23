@@ -13,22 +13,12 @@ guide.
 - Run pre-commit hooks before committing (`pre-commit run --all-files`); never
   bypass with `--no-verify`.
 - New source files carry their original license header. Widgets extracted from
-  `rqt_operator_tools` keep that code's header (BSD-3-Clause / Apache-2.0); new
-  files added here use Apache-2.0 (see `LICENSE`).
+  `rqt_operator_tools` keep that code's BSD-3-Clause header; new files added here
+  use BSD-3-Clause (see `LICENSE`).
 - One logical change per commit.
 
 ## License
 
 Any contribution that you make to this repository will
-be under the Apache 2 License, as dictated by that
-[license](http://www.apache.org/licenses/LICENSE-2.0.html):
-
-~~~
-5. Submission of Contributions. Unless You explicitly state otherwise,
-   any Contribution intentionally submitted for inclusion in the Work
-   by You to the Licensor shall be under the terms and conditions of
-   this License, without any additional terms or conditions.
-   Notwithstanding the above, nothing herein shall supersede or modify
-   the terms of any separate license agreement you may have executed
-   with Licensor regarding such Contributions.
-~~~
+be under the 3-Clause BSD License, as dictated by that
+[license](https://opensource.org/licenses/BSD-3-Clause).
