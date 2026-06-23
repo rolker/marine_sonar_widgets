@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>marine_sonar_widgets</name>
+  <version>0.1.0</version>
+  <description>Shared Qt/OpenGL sonar-display widgets (scrolling backscatter
+  waterfall, water-column echogram) and a framework-agnostic target-marking core
+  for the UNH marine autonomy stack. One implementation feeds both the live
+  rqt_operator_tools plugins and the offline marine_perception_tools viewer, and
+  both produce the same marine_interfaces/msg/Contact when an analyst marks a
+  target. No rqt / rclcpp / rosbag2 dependency. Scaffold only; widgets and tests
+  arrive via the extraction issue.</description>
+  <maintainer email="roland@ccom.unh.edu">Roland Arsenault</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
