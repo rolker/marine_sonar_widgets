@@ -268,6 +268,82 @@ TEST_F(WaterfallMarkingTest, NoPoseEmitsNoSignal)
   EXPECT_EQ(hits, 0) << "no projectable pose -> no boxMarked";
 }
 
+// Regression for the paint-time snapshot: marking must invert against the frame
+// that was painted, NOT the live buffer. Rows appended after the last paint (the
+// live, non-frozen case) must not shift the pixel->row mapping and mis-map the
+// click to a newer row's pose.
+TEST_F(WaterfallMarkingTest, AppendAfterPaintInvertsAgainstPaintedFrame)
+{
+  TestableWaterfall w;
+  w.set_color_map(marine_sonar_widgets::ColorMapType::Grayscale);
+  // Painted frame: buf 0 (oldest, Y=1000) .. buf 4 (newest, Y=1040).
+  for (int i = 0; i < 5; ++i) {
+    w.add_row(make_row(WorldPose{500.0, 1000.0 + 10.0 * i, M_PI / 2.0}));
+  }
+  render(w);  // captures the 5-row snapshot
+
+  // Append more rows WITHOUT repainting (no event loop -> no paintGL). These
+  // grow buffer_ but are not on screen; the stale ring_filled_ + live buffer of
+  // the old code would index into these and report Y in the 2000s.
+  for (int i = 0; i < 3; ++i) {
+    w.add_row(make_row(WorldPose{500.0, 2000.0 + 10.0 * i, M_PI / 2.0}));
+  }
+
+  QRectF got;
+  int hits = 0;
+  QObject::connect(
+    &w, &WaterfallWidget::boxMarked, &w, [&](QRectF r) {got = r; ++hits;});
+
+  w.setMarkMode(true);
+  w.press(QPoint(120, 0));
+  w.move(QPoint(136, kH - 1));
+  w.release(QPoint(136, kH - 1));
+
+  ASSERT_EQ(hits, 1);
+  // Must reflect the PAINTED rows (1000..1040), never the un-painted appends.
+  EXPECT_NEAR(got.top(), 1000.0, 1e-6);
+  EXPECT_NEAR(got.bottom(), 1040.0, 1e-6);
+  EXPECT_LT(got.bottom(), 1500.0) << "must not index un-painted appended rows";
+}
+
+// Slant-display inversion must remove the water column with the row's TRUE
+// altitude to land the map point on the seabed plane. In slant axis mode the
+// displayed range is slant; the lateral ground offset is sqrt(slant^2 - alt^2).
+TEST_F(WaterfallMarkingTest, SlantDisplayRemovesWaterColumnWithTrueAltitude)
+{
+  TestableWaterfall w;
+  w.set_color_map(marine_sonar_widgets::ColorMapType::Grayscale);
+  w.set_ground_range(false);  // force slant axis (no ground projection in display)
+
+  const double alt = 10.0;
+  const WorldPose pose{0.0, 0.0, M_PI / 2.0};  // left vector (-1, 0)
+  for (int i = 0; i < 5; ++i) {
+    WaterfallRow r = make_row(pose);
+    r.altitude = alt;  // real altitude present, but display stays slant
+    w.add_row(r);
+  }
+  render(w);
+
+  QRectF got;
+  int hits = 0;
+  QObject::connect(
+    &w, &WaterfallWidget::boxMarked, &w, [&](QRectF r) {got = r; ++hits;});
+
+  // Thin full-height box at a starboard column; half == kRange (slant).
+  w.setMarkMode(true);
+  w.press(QPoint(192, 0));
+  w.move(QPoint(192, kH - 1));
+  w.release(QPoint(192, kH - 1));
+
+  ASSERT_EQ(hits, 1);
+  const double d = expected_d(192, kRange);            // slant range at the column
+  const double ground = std::sqrt(d * d - alt * alt);  // water column removed
+  // heading +pi/2, starboard (d>0) -> mx = pose.x + ground; my = pose.y.
+  EXPECT_NEAR(got.left(), pose.x + ground, 1e-6);
+  EXPECT_NEAR(got.right(), pose.x + ground, 1e-6);
+  EXPECT_LT(ground, d) << "ground offset must be shorter than slant range";
+}
+
 // Mark mode off: a drag must not emit (the widget had no prior mouse behavior).
 TEST_F(WaterfallMarkingTest, MarkModeOffEmitsNoSignal)
 {

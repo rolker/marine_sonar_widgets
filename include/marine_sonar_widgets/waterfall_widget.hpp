@@ -35,7 +35,9 @@
 #include <QRectF>
 
 #include <cstddef>
+#include <optional>
 #include <utility>
+#include <vector>
 
 #include "marine_sonar_widgets/color_map.hpp"
 #include "marine_sonar_widgets/gpu_color_map.hpp"
@@ -158,7 +160,18 @@ private:
   /// when the pixel maps to a row that carries a `world_pose` and metric
   /// geometry; returns false (no map point) otherwise. Mirrors project_sample()
   /// in the reference sidescan_geometry.hpp.
+  ///
+  /// Inverts against `paint_rows_` — the per-row pose+geometry snapshot taken at
+  /// the last paint — NOT the live `buffer_`. This keeps a mark consistent with
+  /// the frame the user actually sees even if rows were appended or the buffer
+  /// was cleared between that paint and the mouse release (live, non-frozen use).
   bool pixel_to_map(const QPoint & px, double & mx, double & my) const;
+
+  /// Snapshot, in displayed order (oldest first, index 0), the pose and metric
+  /// geometry of each row currently rendered into the ring. Called at the end of
+  /// paintGL once `ring_filled_` is final, so pixel_to_map can invert against the
+  /// painted frame independently of later `buffer_` mutation.
+  void update_paint_geometry();
 
   WaterfallBuffer buffer_;
   GpuColorMap gpu_;
@@ -210,6 +223,21 @@ private:
   bool marking_ = false;       ///< a drag is in progress
   QPoint mark_start_;          ///< drag anchor (widget pixels)
   QPoint mark_cur_;            ///< current drag corner (widget pixels)
+
+  /// One displayed row's pose + metric geometry, captured at paint time so
+  /// marking inverts against the rendered frame, not the live buffer. `altitude`
+  /// is the row's TRUE altitude (not the display-zeroed RowGeom::altitude), so
+  /// slant->ground inversion works even when the axis is shown in slant range.
+  struct PaintRow
+  {
+    std::optional<WorldPose> world_pose;  ///< map-frame sonar pose, if supplied
+    double half_width = 0.0;   ///< per-row display half-width (axis units)
+    double altitude = 0.0;     ///< true row altitude (m); 0 = unknown
+    bool ground = false;       ///< axis is ground range (else slant)
+    bool metric = false;       ///< axis is metres (vs sample counts)
+  };
+  /// Displayed rows (oldest first) as of the last paint; size == ring_filled_.
+  std::vector<PaintRow> paint_rows_;
 };
 
 }  // namespace marine_sonar_widgets

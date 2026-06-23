@@ -621,6 +621,9 @@ void WaterfallWidget::paintGL()
       append_rows(pending_appends_);  // may fall back to upload_texture()
       pending_appends_ = 0;
     }
+    // Capture the rendered frame's per-row pose+geometry so marking can invert
+    // against what is on screen, independent of later buffer mutation.
+    update_paint_geometry();
     if (has_data_) {
       const auto [lo, hi] = active_range();
       gpu_.set_range(lo, hi);
@@ -720,39 +723,57 @@ void WaterfallWidget::setMarkMode(bool on)
   }
 }
 
-bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) const
+void WaterfallWidget::update_paint_geometry()
 {
-  // Guard: need rendered data and a non-degenerate widget.
-  const int h = height();
-  const int w = width();
-  if (!has_data_ || ring_filled_ == 0 || w <= 0 || h <= 0) {
-    return false;
+  paint_rows_.clear();
+  if (!has_data_ || ring_filled_ == 0) {
+    return;
   }
   const auto & rows = buffer_.rows();
-  if (rows.empty()) {
+  if (rows.size() < ring_filled_) {
+    return;  // inconsistent state; leave the snapshot empty
+  }
+  // Displayed window = the newest `ring_filled_` rows, oldest first (index 0).
+  const std::size_t first = rows.size() - ring_filled_;
+  paint_rows_.reserve(ring_filled_);
+  for (std::size_t i = first; i < rows.size(); ++i) {
+    const WaterfallRow & row = rows[i];
+    const RowGeom g = row_geom(row, ground_range_);
+    PaintRow pr;
+    pr.world_pose = row.world_pose;
+    pr.half_width = g.half_width;
+    pr.altitude = row.altitude;  // TRUE altitude, not g.altitude (zeroed in slant)
+    pr.ground = g.ground;
+    pr.metric = g.metric;
+    paint_rows_.push_back(pr);
+  }
+}
+
+bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) const
+{
+  // Invert against the painted-frame snapshot, not the live buffer, so a mark
+  // stays consistent with what is on screen even if rows were appended/cleared
+  // since the last paint.
+  const int h = height();
+  const int w = width();
+  if (paint_rows_.empty() || w <= 0 || h <= 0) {
     return false;
   }
 
-  // --- vertical: pixel y -> displayed-row index -> buffer row ---------------
+  // --- vertical: pixel y -> displayed-row index -----------------------------
   // Forward path: screen V (GL, bottom-up) maps oldest->newest bottom->top via
-  //   ridx = floor(v_uv.y * ring_filled), clamped to [0, ring_filled-1]
-  // with the displayed window being the newest `ring_filled` rows of the
-  // buffer. Qt pixel y is top-down, so v_uv.y = 1 - (py / h).
+  //   ridx = floor(v_uv.y * ring_filled), clamped to [0, ring_filled-1].
+  // Qt pixel y is top-down, so v_uv.y = 1 - (py / h). paint_rows_ is in the same
+  // oldest-first order, so its index IS the displayed-row index.
   const double py = std::clamp(static_cast<double>(px.y()), 0.0, static_cast<double>(h - 1));
   const double v_uv_y = std::clamp(1.0 - (py + 0.5) / static_cast<double>(h), 0.0, 1.0);
-  const std::size_t filled = ring_filled_;
+  const std::size_t filled = paint_rows_.size();
   std::size_t ridx = static_cast<std::size_t>(
     std::floor(v_uv_y * static_cast<double>(filled)));
   if (ridx >= filled) {
     ridx = filled - 1;  // mirror the shader clamp at v_uv.y == 1
   }
-  // The displayed window is the newest `filled` rows: buffer index of oldest
-  // displayed row is rows.size() - filled.
-  if (rows.size() < filled) {
-    return false;  // inconsistent state; nothing to project
-  }
-  const std::size_t buf_idx = rows.size() - filled + ridx;
-  const WaterfallRow & row = rows[buf_idx];
+  const PaintRow & row = paint_rows_[ridx];
   if (!row.world_pose.has_value()) {
     return false;  // no pose for this row -> not projectable
   }
@@ -762,11 +783,10 @@ bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) 
   // width with nadir at the center column (see paintGL's px_per_unit and
   // project_row_into's `center`). Under uniform scale every row shares
   // display_half_width_; otherwise each row fits its own half-width.
-  const RowGeom g = row_geom(row, ground_range_);
-  if (!g.metric) {
+  if (!row.metric) {
     return false;  // sample-axis row: no metric mapping to a map-frame point
   }
-  const double half = uniform_scale_ ? display_half_width_ : g.half_width;
+  const double half = uniform_scale_ ? display_half_width_ : row.half_width;
   if (!(half > 0.0)) {
     return false;
   }
@@ -775,15 +795,15 @@ bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) 
   // Signed display range: negative = port/left, positive = starboard/right.
   const double d = (static_cast<double>(px.x()) + 0.5 - cx) / px_per_unit;
 
-  // Convert to an across-track GROUND distance (the lateral offset on the
-  // seabed plane that project_sample() uses). In ground mode the axis already
-  // is ground range; in slant mode convert slant->ground with the row altitude.
+  // Convert to an across-track GROUND distance (the lateral offset on the seabed
+  // plane that project_sample() uses). In ground mode the axis already is ground
+  // range. In slant mode |d| is slant range; remove the water column with the
+  // row's TRUE altitude when known (display zeroes altitude in slant mode, but
+  // the physical geometry still has it). Altitude unknown -> best-effort slant.
   const double mag = std::abs(d);
   double ground_dist = mag;
-  if (!g.ground) {
-    // Slant axis: |d| is slant range. Remove the water column to get the
-    // lateral ground offset, exactly as project_sample()/ground_range() do.
-    ground_dist = ground_range(mag, g.altitude);
+  if (!row.ground && row.altitude > 0.0) {
+    ground_dist = ground_range(mag, row.altitude);
   }
 
   // --- map projection (mirror project_sample) -------------------------------
@@ -831,32 +851,38 @@ void WaterfallWidget::mouseReleaseEvent(QMouseEvent * event)
   const QRect box = QRect(mark_start_, event->pos()).normalized();
   update();
 
-  // Invert the four corners to map points; emit the map-space bounding box.
-  // Rows with no world_pose (or non-metric geometry) yield no point, matching
-  // the reference guard: if no corner projects, emit nothing.
-  const QPoint corners[4] = {
-    box.topLeft(), box.topRight(), box.bottomLeft(), box.bottomRight()};
+  // Project the marked region to a map-frame bounding box. The four corners
+  // alone under-cover a curved/turning track (each row carries its own pose);
+  // because the per-row map projection is affine in pixel-x, a row's extremes
+  // lie on the box's left/right edges, so stepping every pixel-row in the span
+  // and projecting both edges captures the intermediate-row poses exactly.
+  // Rows with no world_pose (or non-metric geometry) contribute nothing,
+  // matching the reference guard: if nothing projects, emit nothing.
   bool have = false;
   double min_x = 0.0;
   double max_x = 0.0;
   double min_y = 0.0;
   double max_y = 0.0;
-  for (const auto & c : corners) {
-    double cmx = 0.0;
-    double cmy = 0.0;
-    if (!pixel_to_map(c, cmx, cmy)) {
-      continue;
-    }
-    if (!have) {
-      min_x = max_x = cmx;
-      min_y = max_y = cmy;
-      have = true;
-    } else {
-      min_x = std::min(min_x, cmx);
-      max_x = std::max(max_x, cmx);
-      min_y = std::min(min_y, cmy);
-      max_y = std::max(max_y, cmy);
-    }
+  const auto accumulate = [&](const QPoint & p) {
+      double cmx = 0.0;
+      double cmy = 0.0;
+      if (!pixel_to_map(p, cmx, cmy)) {
+        return;
+      }
+      if (!have) {
+        min_x = max_x = cmx;
+        min_y = max_y = cmy;
+        have = true;
+      } else {
+        min_x = std::min(min_x, cmx);
+        max_x = std::max(max_x, cmx);
+        min_y = std::min(min_y, cmy);
+        max_y = std::max(max_y, cmy);
+      }
+    };
+  for (int y = box.top(); y <= box.bottom(); ++y) {
+    accumulate(QPoint(box.left(), y));
+    accumulate(QPoint(box.right(), y));
   }
   if (!have) {
     return;  // no projectable pose in the marked region -> no signal
