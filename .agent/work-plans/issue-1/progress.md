@@ -32,3 +32,22 @@ The issue proposes extracting `WaterfallWidget` and `EchogramWidget` from `rqt_o
 ### Open questions
 - [ ] Should `topic_filter.*` move to marine_sonar_widgets (pure STL, no rclcpp) or stay in rqt_sonar_waterfall (ROS-adjacent, no known second consumer)?
 - [ ] Namespace rename: move to `marine_sonar_widgets::` for extracted files (recommended) or keep `rqt_sonar_waterfall::` for zero-churn move?
+
+## Plan Review
+**Status**: complete
+**When**: 2026-06-23 16:24 +00:00
+**By**: Claude Code Agent (Claude Opus)
+<!-- Independent: fresh-context Opus sub-agent reviewing a plan authored by a Sonnet invocation. The shared workspace $AGENT_NAME makes the name-match self-review heuristic a false positive here; this is NOT an author self-review. -->
+
+**Plan**: `.agent/work-plans/issue-1/plan.md` at `7709596`
+**PR**: PR-less (`--issue` / worktree mode; `gh` unauthenticated in this env — issue sourced from the `## Issue Review` entry + plan context, claims verified against the live `rqt_operator_tools` tree)
+**Verdict**: changes-requested
+
+### Findings
+- [ ] (must-fix) License mismatch: scaffold declares Apache-2.0 (`package.xml:14`, CMakeLists header, LICENSE) but all extracted sources carry BSD-3-Clause headers and both origin packages are BSD-3-Clause; reconcile (likely set package to BSD-3-Clause) — `plan.md:136`
+- [ ] (must-fix) `topic_filter` self-contradiction: steps 1/4 + Files table move it, but Open Questions recommends leaving it in `rqt_sonar_waterfall`; pick one and make steps consistent (adjust moving-test count 12→11 if it stays) — `plan.md:150`
+- [ ] (suggestion) `marine_interfaces` declared in PR-A but unused until PR-C's `contact_builder`; declare it in PR-C per "only what's needed" — `plan.md:46`
+- [ ] (suggestion) `echogram_widget.hpp` includes both `color_map.hpp` and `gpu_color_map.hpp`; note `gpu_color_map.hpp` in the include update too — `plan.md:18`
+- [ ] (suggestion) Close the namespace-rename open question (rename recommended; `ping.cpp` is among files it touches) — `plan.md:154`
+
+Verified against source: file targeting accurate (10 hpp + 10 cpp + 12 tests; staying set correct); all moving files are dependency-boundary-clean (`topic_filter`'s `marine_radar_control_msgs` reference is a topic-type string literal, not an include). Plan is structurally sound; resolve the two must-fix items inline before implementation.
