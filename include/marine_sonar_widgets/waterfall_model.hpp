@@ -39,6 +39,20 @@
 namespace marine_sonar_widgets
 {
 
+/// Map-frame pose of the sonar at this row's acquisition instant. Supplied by
+/// the consumer (offline: a bag pose table; live: TF). Lets the widget invert a
+/// marked pixel box into map coordinates. nullopt -> marking yields no map rect.
+///
+/// `heading_rad` is the sensor heading in the map frame (ENU, radians CCW from
+/// +x/east), matching PingGeometry::yaw in the reference sidescan_geometry.hpp:
+/// across-track "left of heading" is (-sin heading, cos heading).
+struct WorldPose
+{
+  double x = 0.0;
+  double y = 0.0;
+  double heading_rad = 0.0;
+};
+
 /// One assembled waterfall row: the across-track intensity profile for a single
 /// instant, plus the metadata needed to scale and order it.
 ///
@@ -96,6 +110,13 @@ struct WaterfallRow
   float max_intensity_tvg = 0.0f;
   bool has_tvg = false;
   double tvg_slope = 0.0;
+
+  /// Map-frame sonar pose at this row's acquisition instant. When set, the
+  /// widget can invert a marked pixel in this row into a map-frame point.
+  /// Default nullopt: existing consumers (live plugin, tests) leave it unset and
+  /// marking over such rows yields no map rect. Additive — does not affect
+  /// rendering, decoding, or auto-range.
+  std::optional<WorldPose> world_pose = std::nullopt;
 };
 
 /// Decode a SonarImageData blob into per-sample float values.

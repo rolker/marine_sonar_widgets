@@ -31,6 +31,8 @@
 
 #include <QOpenGLFunctions_3_3_Core>
 #include <QOpenGLWidget>
+#include <QPoint>
+#include <QRectF>
 
 #include <cstddef>
 #include <utility>
@@ -104,10 +106,29 @@ public:
   bool frozen() const {return frozen_;}
   std::size_t history() const {return buffer_.capacity();}
 
+  // --- marking mode (issue #1, PR-B) ---
+  /// Enable a left-drag rubber-band selection. When off, mouse events pass
+  /// through unchanged (the widget had no prior mouse handling, so this is the
+  /// only behavior either way). On release in mark mode the pixel rect is
+  /// inverted into a map-frame QRectF and `boxMarked` is emitted — unless no
+  /// dragged-over row carries a `world_pose`, in which case nothing is emitted.
+  void setMarkMode(bool on);
+  bool markMode() const {return mark_mode_;}
+
+Q_SIGNALS:
+  /// Emitted on drag-release in mark mode with the map-frame bounding box of the
+  /// marked region (normalized; same frame as the rows' WorldPose). Not emitted
+  /// when the marked region has no projectable pose.
+  void boxMarked(QRectF map_rect);
+
 protected:
   void initializeGL() override;
   void resizeGL(int w, int h) override;
   void paintGL() override;
+
+  void mousePressEvent(QMouseEvent * event) override;
+  void mouseMoveEvent(QMouseEvent * event) override;
+  void mouseReleaseEvent(QMouseEvent * event) override;
 
 private:
   /// (Re)upload the whole buffer to the intensity texture. Must run with the GL
@@ -130,6 +151,14 @@ private:
   void ensure_tvg_cache();
   /// Compute one row's TVG-corrected samples + extremes for the current slope.
   void compute_row_tvg(WaterfallRow & row) const;
+
+  /// Invert a widget pixel into a map-frame point, reversing the render
+  /// geometry (newest-at-top vertical scroll + centered across-track axis with
+  /// optional slant->ground and uniform-scale). Writes (mx, my) and returns true
+  /// when the pixel maps to a row that carries a `world_pose` and metric
+  /// geometry; returns false (no map point) otherwise. Mirrors project_sample()
+  /// in the reference sidescan_geometry.hpp.
+  bool pixel_to_map(const QPoint & px, double & mx, double & my) const;
 
   WaterfallBuffer buffer_;
   GpuColorMap gpu_;
@@ -175,6 +204,12 @@ private:
   bool display_is_ground_ = false;   ///< axis is ground range
   bool display_metric_ = false;      ///< axis is metres (label with "m")
   bool depth_missing_ = false;       ///< ground requested but newest row has no altitude
+
+  // --- marking mode state (issue #1, PR-B) ---
+  bool mark_mode_ = false;     ///< left-drag rubber-band selection enabled
+  bool marking_ = false;       ///< a drag is in progress
+  QPoint mark_start_;          ///< drag anchor (widget pixels)
+  QPoint mark_cur_;            ///< current drag corner (widget pixels)
 };
 
 }  // namespace marine_sonar_widgets
