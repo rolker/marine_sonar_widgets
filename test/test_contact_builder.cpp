@@ -44,6 +44,7 @@ TEST(ContactBuilder, BoxContactCentroidAndExtent)
   EXPECT_NEAR(c.shape.dimensions.y, 6.0, 1e-9);
   EXPECT_TRUE(std::isnan(c.geo_pose.position.latitude));       // unresolved
   EXPECT_EQ(c.header.stamp.sec, 1234);
+  EXPECT_EQ(c.header.stamp.nanosec, 500000000u);  // 0.5 s fractional part
 }
 
 // All four corners (any point set) collapse to the same axis-aligned extent as
