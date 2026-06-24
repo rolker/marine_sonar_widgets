@@ -109,22 +109,26 @@ struct MagentaStats
 {
   int count = 0;
   double mean_x = 0.0;
+  double mean_y = 0.0;
 };
 
 MagentaStats scan_magenta(const QImage & img)
 {
   MagentaStats s;
   double sum_x = 0.0;
+  double sum_y = 0.0;
   for (int y = 0; y < img.height(); ++y) {
     for (int x = 0; x < img.width(); ++x) {
       if (is_magenta(img.pixel(x, y))) {
         ++s.count;
         sum_x += x;
+        sum_y += y;
       }
     }
   }
   if (s.count > 0) {
     s.mean_x = sum_x / s.count;
+    s.mean_y = sum_y / s.count;
   }
   return s;
 }
@@ -171,11 +175,42 @@ TEST_F(WaterfallContactsTest, StarboardContactDrawsRightOfCentre)
   posed_rows(w);
   render(w);  // populate paint_rows_
 
+  // y=1020 matches the middle row's pose (rows at y=1000..1040), so the box sits
+  // near mid-height: closest-approach ridx=2 of 5 -> py ~= 0.5*kH.
   w.setContacts({ContactBox{10.0, 1020.0, 4.0, 4.0, QString("T-1")}});
   const MagentaStats s = scan_magenta(render(w));
 
   ASSERT_GT(s.count, 0) << "in-range contact should draw a box";
   EXPECT_GT(s.mean_x, kW / 2.0) << "starboard contact must draw right of centre";
+  EXPECT_GT(s.mean_y, 70.0);
+  EXPECT_LT(s.mean_y, 190.0) << "mid-track contact should box near mid-height";
+}
+
+// Slant-display mode (altitude > 0): the in-range gate must use the SLANT range,
+// not the raw ground offset. A contact whose ground offset is within the per-side
+// range but whose slant exceeds it must NOT draw (the must-fix regression).
+TEST_F(WaterfallContactsTest, SlantModeGatesOnSlantRange)
+{
+  WaterfallWidget w;
+  w.set_color_map(marine_sonar_widgets::ColorMapType::Grayscale);
+  w.set_ground_range(false);  // slant axis; side range stays the slant kRange
+  const double alt = 20.0;
+  for (int i = 0; i < 5; ++i) {
+    WaterfallRow r = make_row(WorldPose{0.0, 1000.0 + 10.0 * i, M_PI / 2.0});
+    r.altitude = alt;
+    w.add_row(r);
+  }
+  render(w);
+
+  // Ground offset 20 -> slant hypot(20,20)=28.3 < 32: in range, draws.
+  w.setContacts({ContactBox{20.0, 1020.0, 4.0, 4.0, QString("in")}});
+  EXPECT_GT(scan_magenta(render(w)).count, 0) << "slant within range should draw";
+
+  // Ground offset 28 (< 32) but slant hypot(28,20)=34.4 > 32: beyond the swath,
+  // must NOT draw. Gating on the ground offset (the bug) would draw it.
+  w.setContacts({ContactBox{28.0, 1020.0, 4.0, 4.0, QString("out")}});
+  EXPECT_EQ(scan_magenta(render(w)).count, 0)
+    << "ground offset within range but slant beyond -> no draw";
 }
 
 // A port contact (x<0) within range draws left of centre.

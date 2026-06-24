@@ -837,15 +837,18 @@ void WaterfallWidget::draw_contacts(QPainter & painter) const
       const double ground_lat = std::abs(left);
       const bool is_port = (left > 0.0);
       const double side_half = is_port ? row.half_port : row.half_stbd;
-      if (!(side_half > 0.0) || ground_lat > side_half) {
-        flush();          // out of this side's range -> the run (if any) ends
-        continue;
-      }
       // Display range at this lateral offset: ground axis uses the lateral offset
       // directly; slant axis puts the sample at slant = hypot(lateral, altitude).
       double disp = ground_lat;
       if (!row.ground && row.altitude > 0.0) {
         disp = std::sqrt(ground_lat * ground_lat + row.altitude * row.altitude);
+      }
+      // In-range test in the SAME units as side_half (which is a slant range in
+      // slant mode, a ground range in ground mode) — compare disp, not the raw
+      // ground offset, or a far-edge contact with altitude could plot off-swath.
+      if (!(side_half > 0.0) || disp > side_half) {
+        flush();          // out of this side's range -> the run (if any) ends
+        continue;
       }
       const double d = is_port ? -disp : disp;
       const double horiz = std::sqrt(along * along + ground_lat * ground_lat);

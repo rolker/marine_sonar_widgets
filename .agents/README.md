@@ -36,11 +36,16 @@ holds the GPU display widgets moved (behavior-preserving) out of
 `EchogramWidget`/`Ping` — with their 12 gtests. Deps: Qt5 + `marine_colormap` +
 `marine_acoustic_msgs`. License: BSD-3-Clause (matches the origin packages).
 
-Still to land:
-- **PR-B** — marking mode: `std::optional<WorldPose>` on `WaterfallRow`,
+Landed since:
+- **PR-B** (#1) — marking mode: `std::optional<WorldPose>` on `WaterfallRow`,
   `setMarkMode()` + `boxMarked()` on `WaterfallWidget` (pose-source-agnostic).
-- **PR-C** — `make_box_contact` + `MapPoint` extracted from
-  `marine_perception_tools`; adds the `marine_interfaces` dep.
+- **PR-C** (#1) — `make_box_contact` + `MapPoint` extracted from
+  `marine_perception_tools`; adds the `marine_interfaces` dep (Apache-2.0; the
+  package is now mixed-license, see the LICENSE files).
+- **Contact overlay** (#6) — `setContacts(ContactBox)` draws already-marked
+  contacts on the waterfall (forward of the marking inversion).
+
+Still to land:
 - **Consumer thinning** (separate PRs in `rqt_operator_tools`): delete the moved
   sources there and depend on this library; same for `marine_perception_tools`.
 

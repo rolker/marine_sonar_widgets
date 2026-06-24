@@ -136,6 +136,11 @@ public:
   /// Draw already-marked contacts on the waterfall (map-frame boxes, projected
   /// onto each pass that ensonified them). View-only — independent of mark mode.
   /// Replaces the current set; pass an empty vector to clear. Triggers a repaint.
+  ///
+  /// GUI-thread only (like add_row): touches widget state with no locking.
+  /// The overlay redraws every paint at O(contacts x displayed-rows) trig/sqrt;
+  /// fine for the handful of contacts this targets — cache per-contact pixels if
+  /// that ever grows large.
   void setContacts(const std::vector<ContactBox> & contacts);
 
 Q_SIGNALS:
