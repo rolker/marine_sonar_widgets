@@ -115,3 +115,22 @@ Reviews PR-B at `d62c6e3` (target-marking + the review-fix commit) vs `origin/ja
 - [x] (suggestion) Comment says projection is "affine in pixel-x"; in slant mode it's nonlinear but monotonic in |d| (result still correct) — reword to "monotonic" — `src/waterfall_widget.cpp:857`
 
 **Resolution (2026-06-23, `35adb1d`):** all 4 round-3 suggestions applied even though the verdict was already approved (cheap, and the first two are the same paint-time-vs-live class as the round-2 must-fix). Snapshot `uniform_scale_`+`display_half_width_` into `paint_uniform_scale_`/`paint_half_width_`; clamp `px.x()` to `[0,w-1]`; `setMarkMode()` repaints unconditionally; bbox comment reworded to "monotonic". Rebuild + full suite green (269 tests, 0 failures). PR-B ready to publish.
+
+## Local Review (Pre-Push)
+**Status**: complete
+**When**: 2026-06-23 23:51 +00:00
+**By**: Claude Code Agent (Claude Opus)
+**Verdict**: approved
+
+**Branch**: feature/issue-1 at `1505709`
+**Mode**: pre-push
+**Depth**: Deep (reason: 245 changed lines ≥ 200 + ci.yml override trigger; change is a verbatim function extraction)
+**Must-fix**: 0 | **Suggestions**: 3
+**Round**: 4 | **Ship**: recommended — faithful byte-for-byte extraction of `make_box_contact`; 0 must-fix; effectively round 1 of the PR-C diff (prior entries reviewed PR-A and PR-B, both merged)
+
+Reviews PR-C only (`1505709`, `make_box_contact` library extraction) vs `origin/jazzy`; PR-A and PR-B landed via PRs #3/#4 and are in `origin/jazzy`. Specialists: Static Analysis (cppcheck clean; package.xml well-formed; build-tree ament copyright/cpplint/uncrustify/cppcheck all 0-failure), Governance, Plan Drift, Claude Adversarial ×2 (Lens A logic/correctness, Lens B systemic/build). Extraction verified byte-for-byte against `marine_perception_tools/src/contact_store.cpp` (only namespace + include path differ; rclcpp serialization correctly left behind); every `marine_interfaces` field access validated against `Contact`/`Shape`/`Kinematics` msg defs. ADR-0001 boundary honored (STL + marine_interfaces only). Build green: `test_contact_builder` 3/3 pass.
+
+### Findings
+- [ ] (suggestion) Test 1 asserts `stamp.sec` for fractional input 1234.5 but never asserts `stamp.nanosec` (expect 500000000); no test covers the fractional-nanosec path — `test/test_contact_builder.cpp:46`
+- [ ] (suggestion) `package.xml` declares Apache-2.0 but repo ships only a BSD-3-Clause LICENSE text; add the Apache-2.0 license text so the dual-license declaration is self-consistent (per-file headers carry the notice; ament_copyright passes) — `package.xml:18`
+- [ ] (suggestion, → follow-up) `marine_perception_tools` consumer migration (plan steps 13-14) deferred; `make_box_contact` is temporarily duplicated (original still at `marine_perception_tools/src/contact_store.cpp:30-73`). Acceptable single-repo scoping (mirrors PR-A); de-duplication is required follow-up.
