@@ -22,6 +22,9 @@ live on the boat or offline from a bag.
 - **Marking** — `setMarkMode()` + `boxMarked(map_rect)`; per-row world-pose
   tagging supplied by the consumer (live TF / offline bag pose table), so the
   widget stays pose-source-agnostic.
+- **Contact overlay** — `setContacts(ContactBox{x,y,w,h,label})` draws
+  already-marked contacts on the waterfall, projected onto each pass that
+  ensonified them (closest-approach row); view-only.
 - `make_box_contact(...)` — the shared `Contact` builder (`ORIGIN_HUMAN`,
   `Shape::BOX`); geo_pose resolved by the consumer.
 

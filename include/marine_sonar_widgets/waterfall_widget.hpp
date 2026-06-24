@@ -33,6 +33,7 @@
 #include <QOpenGLWidget>
 #include <QPoint>
 #include <QRectF>
+#include <QString>
 
 #include <cstddef>
 #include <optional>
@@ -44,8 +45,22 @@
 #include "marine_sonar_widgets/waterfall_buffer.hpp"
 #include "marine_sonar_widgets/waterfall_model.hpp"
 
+class QPainter;
+
 namespace marine_sonar_widgets
 {
+
+/// A previously-marked contact to draw on the waterfall, in the same map frame as
+/// WaterfallRow::world_pose / the boxMarked output. `width`/`height` are the box
+/// footprint in metres; `label` is drawn beside it. Set via setContacts().
+struct ContactBox
+{
+  double x = 0.0;       ///< map-frame centre x (m)
+  double y = 0.0;       ///< map-frame centre y (m)
+  double width = 0.0;   ///< footprint width (m)
+  double height = 0.0;  ///< footprint height (m)
+  QString label;        ///< drawn beside the box (e.g. contact id)
+};
 
 /// Scrolling backscatter waterfall canvas, rendered on the GPU.
 ///
@@ -116,6 +131,17 @@ public:
   /// dragged-over row carries a `world_pose`, in which case nothing is emitted.
   void setMarkMode(bool on);
   bool markMode() const {return mark_mode_;}
+
+  // --- existing-contact overlay (issue #6) ---
+  /// Draw already-marked contacts on the waterfall (map-frame boxes, projected
+  /// onto each pass that ensonified them). View-only — independent of mark mode.
+  /// Replaces the current set; pass an empty vector to clear. Triggers a repaint.
+  ///
+  /// GUI-thread only (like add_row): touches widget state with no locking.
+  /// The overlay redraws every paint at O(contacts x displayed-rows) trig/sqrt;
+  /// fine for the handful of contacts this targets — cache per-contact pixels if
+  /// that ever grows large.
+  void setContacts(const std::vector<ContactBox> & contacts);
 
 Q_SIGNALS:
   /// Emitted on drag-release in mark mode with the map-frame bounding box of the
@@ -232,6 +258,8 @@ private:
   {
     std::optional<WorldPose> world_pose;  ///< map-frame sonar pose, if supplied
     double half_width = 0.0;   ///< per-row display half-width (axis units)
+    double half_port = 0.0;    ///< port display range (axis units); 0 if absent
+    double half_stbd = 0.0;    ///< starboard display range (axis units)
     double altitude = 0.0;     ///< true row altitude (m); 0 = unknown
     bool ground = false;       ///< axis is ground range (else slant)
     bool metric = false;       ///< axis is metres (vs sample counts)
@@ -243,6 +271,12 @@ private:
   /// release can't desync inversion from the rendered frame.
   bool paint_uniform_scale_ = true;
   double paint_half_width_ = 0.0;
+
+  /// Already-marked contacts to overlay (map frame); drawn in paintGL.
+  std::vector<ContactBox> contacts_;
+  /// Draw the contact overlay: project each contact's map point onto every pass
+  /// that ensonified it (closest-approach row per run) and box + label it.
+  void draw_contacts(QPainter & painter) const;
 };
 
 }  // namespace marine_sonar_widgets

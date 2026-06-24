@@ -32,6 +32,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPen>
+#include <QPointF>
 #include <QRect>
 #include <QString>
 #include <QSurfaceFormat>
@@ -703,6 +704,9 @@ void WaterfallWidget::paintGL()
   }
   painter.drawText(rect().adjusted(4, 0, -4, -3), Qt::AlignBottom | Qt::AlignLeft, mode);
 
+  // Existing-contact overlay under the live rubber-band.
+  draw_contacts(painter);
+
   // Rubber-band box while marking (mirrors the reference SidescanWaterfall).
   if (marking_) {
     QPen pen(QColor(255, 0, 255));
@@ -745,6 +749,10 @@ void WaterfallWidget::update_paint_geometry()
     PaintRow pr;
     pr.world_pose = row.world_pose;
     pr.half_width = g.half_width;
+    // Per-side display ranges (same slant->ground rule row_geom uses for
+    // half_width), so the contact overlay can test the correct channel's range.
+    pr.half_port = g.ground ? ground_range(g.range_port, g.altitude) : g.range_port;
+    pr.half_stbd = g.ground ? ground_range(g.range_stbd, g.altitude) : g.range_stbd;
     pr.altitude = row.altitude;  // TRUE altitude, not g.altitude (zeroed in slant)
     pr.ground = g.ground;
     pr.metric = g.metric;
@@ -754,6 +762,110 @@ void WaterfallWidget::update_paint_geometry()
   // the frame was drawn with even if the setter is toggled before mark release.
   paint_uniform_scale_ = uniform_scale_;
   paint_half_width_ = display_half_width_;
+}
+
+void WaterfallWidget::setContacts(const std::vector<ContactBox> & contacts)
+{
+  contacts_ = contacts;
+  update();
+}
+
+void WaterfallWidget::draw_contacts(QPainter & painter) const
+{
+  if (contacts_.empty() || paint_rows_.empty()) {
+    return;
+  }
+  const int h = height();
+  const int w = width();
+  if (w <= 0 || h <= 0) {
+    return;
+  }
+  const std::size_t filled = paint_rows_.size();
+  const double cx = static_cast<double>(w) / 2.0;
+  const double row_h = static_cast<double>(h) / static_cast<double>(filled);
+
+  // Isolate pen/brush changes so the overlay can't leak state into a later paint
+  // step (the marking rubber-band re-sets its own pen, but be defensive).
+  painter.save();
+  const QColor mark_color(255, 0, 255);  // magenta: legible on every palette
+  QPen pen(mark_color);
+  pen.setWidthF(2.0);
+
+  for (const auto & c : contacts_) {
+    const double footprint = 0.5 * std::max(c.width, c.height);
+
+    // Walk the displayed rows (oldest first); within each contiguous run that
+    // ensonifies the contact (within the relevant side's range), box the
+    // closest-approach pass and label it. This is the forward of pixel_to_map.
+    bool in_run = false;
+    std::size_t best_ridx = 0;
+    double best_horiz = 0.0;
+    double best_d = 0.0;     // signed display range at closest approach (port<0)
+    double best_half = 0.0;  // per-row half-width for non-uniform scale
+
+    auto flush = [&]() {
+        if (!in_run) {return;}
+        in_run = false;
+        const double half = paint_uniform_scale_ ? paint_half_width_ : best_half;
+        if (!(half > 0.0)) {return;}
+        const double ppu = (static_cast<double>(w) / 2.0) / half;
+        const double col_x = cx + best_d * ppu;
+        // Forward of pixel_to_map's vertical map: ridx -> pixel y (newest at top).
+        const double py =
+          static_cast<double>(h) *
+          (1.0 - (static_cast<double>(best_ridx) + 0.5) / static_cast<double>(filled)) - 0.5;
+        const double hw = std::max(6.0, footprint * ppu);
+        const double hh = std::max(5.0, 1.5 * row_h);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(QRectF(col_x - hw, py - hh, 2.0 * hw, 2.0 * hh));
+        painter.drawText(QPointF(col_x + hw + 3.0, py - hh), c.label);
+      };
+
+    for (std::size_t ridx = 0; ridx < filled; ++ridx) {
+      const PaintRow & row = paint_rows_[ridx];
+      if (!row.world_pose.has_value() || !row.metric) {
+        flush();
+        continue;
+      }
+      const WorldPose & pose = row.world_pose.value();
+      const double dx = c.x - pose.x;
+      const double dy = c.y - pose.y;
+      const double ch = std::cos(pose.heading_rad);
+      const double sh = std::sin(pose.heading_rad);
+      const double along = dx * ch + dy * sh;
+      // Signed left-of-heading distance (positive = port/left, per pixel_to_map's
+      // left vector (-sin, cos)); magnitude is the across-track ground offset.
+      const double left = dx * (-sh) + dy * ch;
+      const double ground_lat = std::abs(left);
+      const bool is_port = (left > 0.0);
+      const double side_half = is_port ? row.half_port : row.half_stbd;
+      // Display range at this lateral offset: ground axis uses the lateral offset
+      // directly; slant axis puts the sample at slant = hypot(lateral, altitude).
+      double disp = ground_lat;
+      if (!row.ground && row.altitude > 0.0) {
+        disp = std::sqrt(ground_lat * ground_lat + row.altitude * row.altitude);
+      }
+      // In-range test in the SAME units as side_half (which is a slant range in
+      // slant mode, a ground range in ground mode) — compare disp, not the raw
+      // ground offset, or a far-edge contact with altitude could plot off-swath.
+      if (!(side_half > 0.0) || disp > side_half) {
+        flush();          // out of this side's range -> the run (if any) ends
+        continue;
+      }
+      const double d = is_port ? -disp : disp;
+      const double horiz = std::sqrt(along * along + ground_lat * ground_lat);
+      if (!in_run || horiz < best_horiz) {
+        best_ridx = ridx;
+        best_horiz = horiz;
+        best_d = d;
+        best_half = row.half_width;
+      }
+      in_run = true;
+    }
+    flush();
+  }
+  painter.restore();
 }
 
 bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) const
