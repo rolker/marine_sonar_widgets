@@ -784,6 +784,9 @@ void WaterfallWidget::draw_contacts(QPainter & painter) const
   const double cx = static_cast<double>(w) / 2.0;
   const double row_h = static_cast<double>(h) / static_cast<double>(filled);
 
+  // Isolate pen/brush changes so the overlay can't leak state into a later paint
+  // step (the marking rubber-band re-sets its own pen, but be defensive).
+  painter.save();
   const QColor mark_color(255, 0, 255);  // magenta: legible on every palette
   QPen pen(mark_color);
   pen.setWidthF(2.0);
@@ -862,6 +865,7 @@ void WaterfallWidget::draw_contacts(QPainter & painter) const
     }
     flush();
   }
+  painter.restore();
 }
 
 bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) const
