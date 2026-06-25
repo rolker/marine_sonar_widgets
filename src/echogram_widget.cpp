@@ -264,7 +264,7 @@ void EchogramWidget::initializeGL()
     gl_ready_ = false;
     return;
   }
-  gpu_.set_palette(color_map_type_);
+  apply_palette();
   palette_dirty_ = false;
   data_dirty_ = true;
   gl_ready_ = true;
@@ -400,7 +400,7 @@ void EchogramWidget::paintGL()
   const bool window_set = window.second > window.first;
   if (gl_ready_) {
     if (palette_dirty_) {
-      gpu_.set_palette(color_map_type_);
+      apply_palette();
       palette_dirty_ = false;
     }
     if (data_dirty_) {
@@ -565,10 +565,30 @@ void EchogramWidget::setContrast(float contrast)
 void EchogramWidget::setColorMapIndex(int index)
 {
   const auto type = marine_sonar_widgets::color_map_from_index(index);
-  if (color_map_type_ != type) {
+  if (color_map_type_ != type || palette_override_ != nullptr) {
     color_map_type_ = type;
+    palette_override_ = nullptr;   // back to a built-in
     palette_dirty_ = true;
     update();
+  }
+}
+
+void EchogramWidget::set_color_map(const marine_colormap::Palette & palette)
+{
+  // Any shared-library palette (the full marine_colormap set, not just the three
+  // ColorMapType built-ins). marine_colormap palettes are stable singletons, so
+  // storing the pointer is safe; applied on the next paint.
+  palette_override_ = &palette;
+  palette_dirty_ = true;
+  update();
+}
+
+void EchogramWidget::apply_palette()
+{
+  if (palette_override_ != nullptr) {
+    gpu_.set_palette(*palette_override_);
+  } else {
+    gpu_.set_palette(color_map_type_);
   }
 }
 

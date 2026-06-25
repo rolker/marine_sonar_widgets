@@ -95,6 +95,10 @@ public:
 
   // --- client-side view controls ---
   void set_color_map(ColorMapType type);
+  /// Use any marine_colormap palette (the full shared-library set, not just the
+  /// three ColorMapType built-ins). The palette must outlive the widget — pass a
+  /// marine_colormap singleton (find_palette / palette()).
+  void set_color_map(const marine_colormap::Palette & palette);
   void set_gain(float gain);
   void set_contrast(float contrast);
   /// Scrollback depth (rows); clamped to >= 1.
@@ -180,6 +184,10 @@ private:
   /// Compute one row's TVG-corrected samples + extremes for the current slope.
   void compute_row_tvg(WaterfallRow & row) const;
 
+  /// Upload the active palette to the GPU LUT — the override palette when one was
+  /// set via set_color_map(Palette), else the ColorMapType built-in. GL-current.
+  void apply_palette();
+
   /// Invert a widget pixel into a map-frame point, reversing the render
   /// geometry (newest-at-top vertical scroll + centered across-track axis with
   /// optional slant->ground and uniform-scale). Writes (mx, my) and returns true
@@ -223,6 +231,9 @@ private:
   double range_max_ = 0.0;  ///< slant range of the newest row, meters (0 = unknown)
 
   ColorMapType color_map_type_ = ColorMapType::Grayscale;
+  // When non-null, overrides color_map_type_ with any marine_colormap palette
+  // (set_color_map(Palette)); a stable singleton, so a raw pointer is safe.
+  const marine_colormap::Palette * palette_override_ = nullptr;
   float gain_ = 1.0f;
   float contrast_ = 1.0f;
   bool frozen_ = false;

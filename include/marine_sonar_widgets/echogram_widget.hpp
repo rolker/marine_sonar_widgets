@@ -93,6 +93,10 @@ public slots:
   void setWhitePoint(float value);
   void setContrast(float contrast);
   void setColorMapIndex(int index);
+  /// Use any marine_colormap palette (the full shared-library set, not just the
+  /// three ColorMapType built-ins). The palette must outlive the widget — pass a
+  /// marine_colormap singleton (find_palette / palette()).
+  void set_color_map(const marine_colormap::Palette & palette);
 
   /// Number of recent pings to retain and auto-fit across the canvas width (the
   /// data-retention / "how much you see" knob). Clamped to >= 1.
@@ -109,6 +113,10 @@ protected:
   void mouseReleaseEvent(QMouseEvent * event) override;
 
 private:
+  /// Upload the active palette to the GPU LUT — the override palette when one was
+  /// set via set_color_map(Palette), else the ColorMapType built-in. GL-current.
+  void apply_palette();
+
   /// One ping, decoded once on arrival: geometry + float samples (any dtype),
   /// plus the cached finite-sample value extremes (for the auto-range scan).
   struct DecodedPing
@@ -160,6 +168,9 @@ private:
   float contrast_ = 1.0f;
   marine_sonar_widgets::ColorMapType color_map_type_ =
     marine_sonar_widgets::ColorMapType::Grayscale;
+  // When non-null, overrides color_map_type_ with any marine_colormap palette
+  // (set_color_map(Palette)); a stable singleton, so a raw pointer is safe.
+  const marine_colormap::Palette * palette_override_ = nullptr;
 
   // Shared depth geometry across the buffer (meters), from recomputeGeometry().
   float min_depth_ = 0.0f;

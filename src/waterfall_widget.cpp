@@ -109,8 +109,28 @@ void WaterfallWidget::clear()
 void WaterfallWidget::set_color_map(ColorMapType type)
 {
   color_map_type_ = type;
+  palette_override_ = nullptr;   // back to a built-in
   palette_dirty_ = true;
   update();
+}
+
+void WaterfallWidget::set_color_map(const marine_colormap::Palette & palette)
+{
+  // Any shared-library palette (viridis/turbo/... beyond the three ColorMapType
+  // built-ins). marine_colormap palettes are stable singletons, so storing the
+  // pointer is safe; it's applied on the next paint.
+  palette_override_ = &palette;
+  palette_dirty_ = true;
+  update();
+}
+
+void WaterfallWidget::apply_palette()
+{
+  if (palette_override_ != nullptr) {
+    gpu_.set_palette(*palette_override_);
+  } else {
+    gpu_.set_palette(color_map_type_);
+  }
 }
 
 void WaterfallWidget::set_gain(float gain)
@@ -287,7 +307,7 @@ void WaterfallWidget::initializeGL()
     gl_ready_ = false;
     return;
   }
-  gpu_.set_palette(color_map_type_);
+  apply_palette();
   palette_dirty_ = false;
   data_dirty_ = true;  // upload whatever is already buffered on first paint
   gl_ready_ = true;
@@ -611,7 +631,7 @@ void WaterfallWidget::paintGL()
 
   if (gl_ready_) {
     if (palette_dirty_) {
-      gpu_.set_palette(color_map_type_);
+      apply_palette();
       palette_dirty_ = false;
     }
     if (data_dirty_) {

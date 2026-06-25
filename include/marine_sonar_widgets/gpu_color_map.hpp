@@ -88,6 +88,11 @@ public:
   /// at least 2. Requires a current GL context.
   void set_palette(ColorMapType type, int lut_size = 256);
 
+  /// Same, for any `marine_colormap` palette (not just the three `ColorMapType`
+  /// built-ins) — lets a consumer offer the full shared-library palette set.
+  /// Requires a current GL context.
+  void set_palette(const marine_colormap::Palette & palette, int lut_size = 256);
+
   void set_range(float min, float max)
   {
     min_ = min;

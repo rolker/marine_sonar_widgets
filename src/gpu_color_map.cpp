@@ -193,18 +193,23 @@ bool GpuColorMap::initialize()
 
 void GpuColorMap::set_palette(ColorMapType type, int lut_size)
 {
-  if (lut_size < 2) {
-    lut_size = 2;
-  }
   const marine_colormap::Palette * pal = shared_palette(type);
   if (pal == nullptr) {
     return;  // never happens for a built-in name; guarded so a lib change can't crash
+  }
+  set_palette(*pal, lut_size);
+}
+
+void GpuColorMap::set_palette(const marine_colormap::Palette & palette, int lut_size)
+{
+  if (lut_size < 2) {
+    lut_size = 2;
   }
 
   // Identity transfer: bake only the palette. Gain/contrast/min/max are applied
   // in the shader as uniforms, so re-ranging never re-bakes the LUT.
   const std::vector<marine_colormap::Rgba8> lut =
-    marine_colormap::bake_lut(*pal, marine_colormap::TransferParams{},
+    marine_colormap::bake_lut(palette, marine_colormap::TransferParams{},
       static_cast<std::size_t>(lut_size));
 
   if (lut_tex_ == 0) {
