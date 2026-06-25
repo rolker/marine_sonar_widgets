@@ -99,6 +99,8 @@ public:
   /// three ColorMapType built-ins). The palette must outlive the widget — pass a
   /// marine_colormap singleton (find_palette / palette()).
   void set_color_map(const marine_colormap::Palette & palette);
+  /// Reject a temporary palette at compile time (the widget stores a pointer).
+  void set_color_map(marine_colormap::Palette && palette) = delete;
   void set_gain(float gain);
   void set_contrast(float contrast);
   /// Scrollback depth (rows); clamped to >= 1.
