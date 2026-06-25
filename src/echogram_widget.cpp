@@ -452,6 +452,16 @@ void EchogramWidget::paintGL()
       }
     }
   }
+
+  // Linked-cursor along-track line (set via setCursorAlongTrack from another pane).
+  if (cursor_frac_.has_value() && width() > 0) {
+    const int x = static_cast<int>(std::lround(
+        std::clamp(cursor_frac_.value(), 0.0, 1.0) * width()));
+    QPen pen(QColor(0, 255, 255));   // cyan, matching the waterfall cursor
+    pen.setWidthF(1.5);
+    painter.setPen(pen);
+    painter.drawLine(x, 0, x, height());
+  }
 }
 
 void EchogramWidget::wheelEvent(QWheelEvent * event)
@@ -484,6 +494,11 @@ void EchogramWidget::wheelEvent(QWheelEvent * event)
 
 void EchogramWidget::mousePressEvent(QMouseEvent * event)
 {
+  if (event->button() == Qt::MiddleButton && width() > 0) {
+    // Middle-click: seek to this along-track fraction (0 = left/oldest edge).
+    Q_EMIT seekAlongTrack(std::clamp(event->localPos().x() / width(), 0.0, 1.0));
+    return;
+  }
   if (event->button() == Qt::LeftButton) {
     depth_offset_start_ = depth_offset_;
     depth_translation_start_ = static_cast<float>(event->localPos().y());
@@ -503,8 +518,18 @@ void EchogramWidget::mouseMoveEvent(QMouseEvent * event)
     data_dirty_ = true;
     update();
   }
+  // Report the hovered along-track fraction for a cross-pane linked cursor.
+  if (width() > 0) {
+    Q_EMIT hoverAlongTrack(std::clamp(event->localPos().x() / width(), 0.0, 1.0), true);
+  }
   emit mouseMoved(event->localPos());
   QOpenGLWidget::mouseMoveEvent(event);
+}
+
+void EchogramWidget::setCursorAlongTrack(const std::optional<double> & frac)
+{
+  cursor_frac_ = frac;
+  update();
 }
 
 void EchogramWidget::mouseReleaseEvent(QMouseEvent * event)

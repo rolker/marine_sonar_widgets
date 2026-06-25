@@ -147,11 +147,24 @@ public:
   /// that ever grows large.
   void setContacts(const std::vector<ContactBox> & contacts);
 
+  /// Draw a transient cross-pane cursor at a map point (projected onto the
+  /// closest-approach pass, like a contact). nullopt clears it. View-only; for a
+  /// linked cursor driven by hoverMap from another pane. Triggers a repaint.
+  void setCursorPoint(const std::optional<QPointF> & map_point);
+
 Q_SIGNALS:
   /// Emitted on drag-release in mark mode with the map-frame bounding box of the
   /// marked region (normalized; same frame as the rows' WorldPose). Not emitted
   /// when the marked region has no projectable pose.
   void boxMarked(QRectF map_rect);
+
+  /// Emitted on every mouse move with the hovered map point and whether it
+  /// projected (false = no pose / non-metric / off-swath). For a linked cursor.
+  void hoverMap(QPointF map_point, bool valid);
+
+  /// Emitted on middle-click with the map point under the cursor (when it
+  /// projects). For click-to-seek. Independent of mark mode.
+  void seekRequested(QPointF map_point);
 
 protected:
   void initializeGL() override;
@@ -288,6 +301,11 @@ private:
   /// Draw the contact overlay: project each contact's map point onto every pass
   /// that ensonified it (closest-approach row per run) and box + label it.
   void draw_contacts(QPainter & painter) const;
+
+  /// Transient linked-cursor map point (set via setCursorPoint); drawn as a cross.
+  std::optional<QPointF> cursor_map_;
+  /// Draw the linked cursor: a cross at the cursor point's closest-approach pass.
+  void draw_cursor(QPainter & painter) const;
 };
 
 }  // namespace marine_sonar_widgets

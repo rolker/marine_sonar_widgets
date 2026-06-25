@@ -34,6 +34,7 @@
 
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -76,6 +77,10 @@ public:
 
 signals:
   void mouseMoved(QPointF position);
+  /// Hovered along-track fraction [0,1] (0 = left/oldest edge) for a linked cursor.
+  void hoverAlongTrack(double frac, bool valid);
+  /// Middle-click along-track fraction [0,1], for click-to-seek.
+  void seekAlongTrack(double frac);
 
 public slots:
   void addPing(const marine_acoustic_msgs::msg::RawSonarImage & ping);
@@ -97,6 +102,10 @@ public slots:
   /// three ColorMapType built-ins). The palette must outlive the widget — pass a
   /// marine_colormap singleton (find_palette / palette()).
   void set_color_map(const marine_colormap::Palette & palette);
+
+  /// Draw a transient linked-cursor along-track line at fraction [0,1] (0 = left/
+  /// oldest edge). nullopt clears it. Driven by another pane's hover. Repaints.
+  void setCursorAlongTrack(const std::optional<double> & frac);
 
   /// Number of recent pings to retain and auto-fit across the canvas width (the
   /// data-retention / "how much you see" knob). Clamped to >= 1.
@@ -182,6 +191,8 @@ private:
   float depth_offset_ = 0.0f;
 
   bool translating_depth_ = false;
+  /// Transient linked-cursor along-track fraction (set via setCursorAlongTrack).
+  std::optional<double> cursor_frac_;
   float depth_translation_start_ = 0.0f;
   float depth_offset_start_ = 0.0f;
 
