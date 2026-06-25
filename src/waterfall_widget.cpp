@@ -57,6 +57,7 @@ WaterfallWidget::WaterfallWidget(QWidget * parent)
   fmt.setProfile(QSurfaceFormat::CompatibilityProfile);
   setFormat(fmt);
   setMinimumSize(256, 256);
+  setMouseTracking(true);   // hover reporting (hoverMap) needs moves without a button
 }
 
 WaterfallWidget::~WaterfallWidget()
@@ -109,8 +110,28 @@ void WaterfallWidget::clear()
 void WaterfallWidget::set_color_map(ColorMapType type)
 {
   color_map_type_ = type;
+  palette_override_ = nullptr;   // back to a built-in
   palette_dirty_ = true;
   update();
+}
+
+void WaterfallWidget::set_color_map(const marine_colormap::Palette & palette)
+{
+  // Any shared-library palette (viridis/turbo/... beyond the three ColorMapType
+  // built-ins). marine_colormap palettes are stable singletons, so storing the
+  // pointer is safe; it's applied on the next paint.
+  palette_override_ = &palette;
+  palette_dirty_ = true;
+  update();
+}
+
+void WaterfallWidget::apply_palette()
+{
+  if (palette_override_ != nullptr) {
+    gpu_.set_palette(*palette_override_);
+  } else {
+    gpu_.set_palette(color_map_type_);
+  }
 }
 
 void WaterfallWidget::set_gain(float gain)
@@ -287,7 +308,7 @@ void WaterfallWidget::initializeGL()
     gl_ready_ = false;
     return;
   }
-  gpu_.set_palette(color_map_type_);
+  apply_palette();
   palette_dirty_ = false;
   data_dirty_ = true;  // upload whatever is already buffered on first paint
   gl_ready_ = true;
@@ -611,7 +632,7 @@ void WaterfallWidget::paintGL()
 
   if (gl_ready_) {
     if (palette_dirty_) {
-      gpu_.set_palette(color_map_type_);
+      apply_palette();
       palette_dirty_ = false;
     }
     if (data_dirty_) {
@@ -706,6 +727,7 @@ void WaterfallWidget::paintGL()
 
   // Existing-contact overlay under the live rubber-band.
   draw_contacts(painter);
+  draw_cursor(painter);   // cross-pane linked cursor
 
   // Rubber-band box while marking (mirrors the reference SidescanWaterfall).
   if (marking_) {
@@ -715,6 +737,87 @@ void WaterfallWidget::paintGL()
     painter.setBrush(QColor(255, 0, 255, 40));
     painter.drawRect(QRectF(mark_start_, mark_cur_).normalized());
   }
+}
+
+void WaterfallWidget::setCursorPoint(const std::optional<QPointF> & map_point)
+{
+  cursor_map_ = map_point;
+  update();
+}
+
+void WaterfallWidget::draw_cursor(QPainter & painter) const
+{
+  if (!cursor_map_.has_value() || paint_rows_.empty()) {
+    return;
+  }
+  const int h = height();
+  const int w = width();
+  if (w <= 0 || h <= 0) {
+    return;
+  }
+  const std::size_t filled = paint_rows_.size();
+  const double cx = static_cast<double>(w) / 2.0;
+  const double mx = cursor_map_->x();
+  const double my = cursor_map_->y();
+
+  // Closest-approach pass to the cursor map point (the single best ensonifying row),
+  // mirroring draw_contacts' projection but drawn as one cross.
+  bool have = false;
+  double best_horiz = 0.0;
+  double best_d = 0.0;
+  double best_half = 0.0;
+  std::size_t best_ridx = 0;
+  for (std::size_t ridx = 0; ridx < filled; ++ridx) {
+    const PaintRow & row = paint_rows_[ridx];
+    if (!row.world_pose.has_value() || !row.metric) {
+      continue;
+    }
+    const WorldPose & pose = row.world_pose.value();
+    const double dx = mx - pose.x;
+    const double dy = my - pose.y;
+    const double ch = std::cos(pose.heading_rad);
+    const double sh = std::sin(pose.heading_rad);
+    const double along = dx * ch + dy * sh;
+    const double left = dx * (-sh) + dy * ch;
+    const double ground_lat = std::abs(left);
+    const bool is_port = (left > 0.0);
+    const double side_half = is_port ? row.half_port : row.half_stbd;
+    double disp = ground_lat;
+    if (!row.ground && row.altitude > 0.0) {
+      disp = std::sqrt(ground_lat * ground_lat + row.altitude * row.altitude);
+    }
+    if (!(side_half > 0.0) || disp > side_half) {
+      continue;
+    }
+    const double horiz = std::sqrt(along * along + ground_lat * ground_lat);
+    if (!have || horiz < best_horiz) {
+      have = true;
+      best_horiz = horiz;
+      best_d = is_port ? -disp : disp;
+      best_half = row.half_width;
+      best_ridx = ridx;
+    }
+  }
+  if (!have) {
+    return;
+  }
+  const double half = paint_uniform_scale_ ? paint_half_width_ : best_half;
+  if (!(half > 0.0)) {
+    return;
+  }
+  const double ppu = (static_cast<double>(w) / 2.0) / half;
+  const double col_x = cx + best_d * ppu;
+  const double py =
+    static_cast<double>(h) *
+    (1.0 - (static_cast<double>(best_ridx) + 0.5) / static_cast<double>(filled)) - 0.5;
+  painter.save();
+  QPen pen(QColor(0, 255, 255));   // cyan: distinct from magenta contacts
+  pen.setWidthF(1.5);
+  painter.setPen(pen);
+  const double s = 7.0;
+  painter.drawLine(QPointF(col_x - s, py), QPointF(col_x + s, py));
+  painter.drawLine(QPointF(col_x, py - s), QPointF(col_x, py + s));
+  painter.restore();
 }
 
 void WaterfallWidget::setMarkMode(bool on)
@@ -943,6 +1046,16 @@ bool WaterfallWidget::pixel_to_map(const QPoint & px, double & mx, double & my) 
 
 void WaterfallWidget::mousePressEvent(QMouseEvent * event)
 {
+  // Middle-click: seek-to-position. Invert the pixel to a map point and request a
+  // seek (independent of mark mode); no-op when the pixel has no projectable pose.
+  if (event->button() == Qt::MiddleButton) {
+    double mx = 0.0;
+    double my = 0.0;
+    if (pixel_to_map(event->pos(), mx, my)) {
+      Q_EMIT seekRequested(QPointF(mx, my));
+    }
+    return;
+  }
   if (event->button() != Qt::LeftButton || !mark_mode_) {
     QOpenGLWidget::mousePressEvent(event);
     return;
@@ -956,6 +1069,13 @@ void WaterfallWidget::mousePressEvent(QMouseEvent * event)
 void WaterfallWidget::mouseMoveEvent(QMouseEvent * event)
 {
   if (!marking_) {
+    // Report the hovered map position (for a cross-pane linked cursor). valid=false
+    // when the pixel doesn't project (no pose / non-metric / off-swath), so the
+    // consumer can clear the indicator in the other panes.
+    double mx = 0.0;
+    double my = 0.0;
+    const bool ok = pixel_to_map(event->pos(), mx, my);
+    Q_EMIT hoverMap(QPointF(mx, my), ok);
     QOpenGLWidget::mouseMoveEvent(event);
     return;
   }

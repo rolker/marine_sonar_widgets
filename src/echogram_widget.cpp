@@ -264,7 +264,7 @@ void EchogramWidget::initializeGL()
     gl_ready_ = false;
     return;
   }
-  gpu_.set_palette(color_map_type_);
+  apply_palette();
   palette_dirty_ = false;
   data_dirty_ = true;
   gl_ready_ = true;
@@ -400,7 +400,7 @@ void EchogramWidget::paintGL()
   const bool window_set = window.second > window.first;
   if (gl_ready_) {
     if (palette_dirty_) {
-      gpu_.set_palette(color_map_type_);
+      apply_palette();
       palette_dirty_ = false;
     }
     if (data_dirty_) {
@@ -452,6 +452,16 @@ void EchogramWidget::paintGL()
       }
     }
   }
+
+  // Linked-cursor along-track line (set via setCursorAlongTrack from another pane).
+  if (cursor_frac_.has_value() && width() > 0) {
+    const int x = static_cast<int>(std::lround(
+        std::clamp(cursor_frac_.value(), 0.0, 1.0) * width()));
+    QPen pen(QColor(0, 255, 255));   // cyan, matching the waterfall cursor
+    pen.setWidthF(1.5);
+    painter.setPen(pen);
+    painter.drawLine(x, 0, x, height());
+  }
 }
 
 void EchogramWidget::wheelEvent(QWheelEvent * event)
@@ -484,6 +494,11 @@ void EchogramWidget::wheelEvent(QWheelEvent * event)
 
 void EchogramWidget::mousePressEvent(QMouseEvent * event)
 {
+  if (event->button() == Qt::MiddleButton && width() > 0) {
+    // Middle-click: seek to this along-track fraction (0 = left/oldest edge).
+    Q_EMIT seekAlongTrack(std::clamp(event->localPos().x() / width(), 0.0, 1.0));
+    return;
+  }
   if (event->button() == Qt::LeftButton) {
     depth_offset_start_ = depth_offset_;
     depth_translation_start_ = static_cast<float>(event->localPos().y());
@@ -503,8 +518,18 @@ void EchogramWidget::mouseMoveEvent(QMouseEvent * event)
     data_dirty_ = true;
     update();
   }
+  // Report the hovered along-track fraction for a cross-pane linked cursor.
+  if (width() > 0) {
+    Q_EMIT hoverAlongTrack(std::clamp(event->localPos().x() / width(), 0.0, 1.0), true);
+  }
   emit mouseMoved(event->localPos());
   QOpenGLWidget::mouseMoveEvent(event);
+}
+
+void EchogramWidget::setCursorAlongTrack(const std::optional<double> & frac)
+{
+  cursor_frac_ = frac;
+  update();
 }
 
 void EchogramWidget::mouseReleaseEvent(QMouseEvent * event)
@@ -565,10 +590,30 @@ void EchogramWidget::setContrast(float contrast)
 void EchogramWidget::setColorMapIndex(int index)
 {
   const auto type = marine_sonar_widgets::color_map_from_index(index);
-  if (color_map_type_ != type) {
+  if (color_map_type_ != type || palette_override_ != nullptr) {
     color_map_type_ = type;
+    palette_override_ = nullptr;   // back to a built-in
     palette_dirty_ = true;
     update();
+  }
+}
+
+void EchogramWidget::set_color_map(const marine_colormap::Palette & palette)
+{
+  // Any shared-library palette (the full marine_colormap set, not just the three
+  // ColorMapType built-ins). marine_colormap palettes are stable singletons, so
+  // storing the pointer is safe; applied on the next paint.
+  palette_override_ = &palette;
+  palette_dirty_ = true;
+  update();
+}
+
+void EchogramWidget::apply_palette()
+{
+  if (palette_override_ != nullptr) {
+    gpu_.set_palette(*palette_override_);
+  } else {
+    gpu_.set_palette(color_map_type_);
   }
 }
 

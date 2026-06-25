@@ -95,6 +95,12 @@ public:
 
   // --- client-side view controls ---
   void set_color_map(ColorMapType type);
+  /// Use any marine_colormap palette (the full shared-library set, not just the
+  /// three ColorMapType built-ins). The palette must outlive the widget — pass a
+  /// marine_colormap singleton (find_palette / palette()).
+  void set_color_map(const marine_colormap::Palette & palette);
+  /// Reject a temporary palette at compile time (the widget stores a pointer).
+  void set_color_map(marine_colormap::Palette && palette) = delete;
   void set_gain(float gain);
   void set_contrast(float contrast);
   /// Scrollback depth (rows); clamped to >= 1.
@@ -143,11 +149,24 @@ public:
   /// that ever grows large.
   void setContacts(const std::vector<ContactBox> & contacts);
 
+  /// Draw a transient cross-pane cursor at a map point (projected onto the
+  /// closest-approach pass, like a contact). nullopt clears it. View-only; for a
+  /// linked cursor driven by hoverMap from another pane. Triggers a repaint.
+  void setCursorPoint(const std::optional<QPointF> & map_point);
+
 Q_SIGNALS:
   /// Emitted on drag-release in mark mode with the map-frame bounding box of the
   /// marked region (normalized; same frame as the rows' WorldPose). Not emitted
   /// when the marked region has no projectable pose.
   void boxMarked(QRectF map_rect);
+
+  /// Emitted on every mouse move with the hovered map point and whether it
+  /// projected (false = no pose / non-metric / off-swath). For a linked cursor.
+  void hoverMap(QPointF map_point, bool valid);
+
+  /// Emitted on middle-click with the map point under the cursor (when it
+  /// projects). For click-to-seek. Independent of mark mode.
+  void seekRequested(QPointF map_point);
 
 protected:
   void initializeGL() override;
@@ -179,6 +198,10 @@ private:
   void ensure_tvg_cache();
   /// Compute one row's TVG-corrected samples + extremes for the current slope.
   void compute_row_tvg(WaterfallRow & row) const;
+
+  /// Upload the active palette to the GPU LUT — the override palette when one was
+  /// set via set_color_map(Palette), else the ColorMapType built-in. GL-current.
+  void apply_palette();
 
   /// Invert a widget pixel into a map-frame point, reversing the render
   /// geometry (newest-at-top vertical scroll + centered across-track axis with
@@ -223,6 +246,9 @@ private:
   double range_max_ = 0.0;  ///< slant range of the newest row, meters (0 = unknown)
 
   ColorMapType color_map_type_ = ColorMapType::Grayscale;
+  // When non-null, overrides color_map_type_ with any marine_colormap palette
+  // (set_color_map(Palette)); a stable singleton, so a raw pointer is safe.
+  const marine_colormap::Palette * palette_override_ = nullptr;
   float gain_ = 1.0f;
   float contrast_ = 1.0f;
   bool frozen_ = false;
@@ -277,6 +303,11 @@ private:
   /// Draw the contact overlay: project each contact's map point onto every pass
   /// that ensonified it (closest-approach row per run) and box + label it.
   void draw_contacts(QPainter & painter) const;
+
+  /// Transient linked-cursor map point (set via setCursorPoint); drawn as a cross.
+  std::optional<QPointF> cursor_map_;
+  /// Draw the linked cursor: a cross at the cursor point's closest-approach pass.
+  void draw_cursor(QPainter & painter) const;
 };
 
 }  // namespace marine_sonar_widgets
